@@ -24,7 +24,7 @@ app.use(cors({
     credentials: true
 }));
 
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/homepedia', {
+mongoose.connect(process.env.MONGO_URI || 'mongodb+srv://mongodb:mongodb@homepedia.71keulw.mongodb.net/?retryWrites=true&w=majority&appName=homepedia', {
     useNewUrlParser: true,
     useUnifiedTopology: true
 })

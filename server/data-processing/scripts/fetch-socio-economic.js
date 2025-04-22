@@ -14,7 +14,7 @@ const pool = new Pool({
 });
 
 // Définition des URLs
-const INCOME_URL = 'https://www.insee.fr/fr/statistiques/fichier/2021266/FILO2018_COM_CSV.zip';
+const INCOME_URL = 'https://www.insee.fr/fr/statistiques/fichier/6692291/FILO2019_DISP_COM.zip';
 const EDUCATION_URL = 'https://data.education.gouv.fr/api/records/1.0/download/?dataset=fr-en-adresse-et-geolocalisation-etablissements-premier-et-second-degre';
 
 const DATA_DIR = path.join(__dirname, '../data');
@@ -213,7 +213,7 @@ async function processEducationData(filePath) {
                 // Vérifier si un enregistrement existe déjà pour cette commune et cette année
                 const checkResult = await client.query(
                     'SELECT id FROM indicateurs_education_communes WHERE commune_id = $1 AND annee = $2',
-                    [communeId, 2023] // Année en cours
+                    [communeId, 2022] // Année en cours
                 );
 
                 if (checkResult.rows.length === 0) {
@@ -224,7 +224,7 @@ async function processEducationData(filePath) {
             ) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
           `, [
                         communeId,
-                        2023, // Année en cours
+                        2022, // Année en cours
                         counts.primaire,
                         counts.college,
                         counts.lycee,

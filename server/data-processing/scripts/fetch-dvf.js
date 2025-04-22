@@ -6,353 +6,378 @@ const { pipeline } = require('stream/promises');
 const { createReadStream, createWriteStream } = require('fs');
 const { Pool } = require('pg');
 const dotenv = require('dotenv');
+const zlib = require('zlib');
 
 dotenv.config();
 
-// Connexion à PostgreSQL
 const pool = new Pool({
     connectionString: process.env.POSTGRES_URI || 'postgres://postgres:postgres@localhost:5432/homepedia'
 });
 
-// Définition des URLs
 const DVF_URL = 'https://files.data.gouv.fr/geo-dvf/latest/csv/2022/full.csv.gz';
 const DATA_DIR = path.join(__dirname, '../data');
 const FILE_PATH = path.join(DATA_DIR, 'dvf_2022.csv.gz');
 const EXTRACTED_PATH = path.join(DATA_DIR, 'dvf_2022.csv');
 
-// Mapping des colonnes (basé sur les exemples fournis)
-const COLUMN_MAPPING = {
-    '_0': 'id_mutation',
-    '_1': 'date_mutation',
-    '_2': 'numero_disposition',
-    '_3': 'nature_mutation',
-    '_4': 'valeur_fonciere',
-    '_5': 'adresse_numero',
-    '_6': 'adresse_suffixe',
-    '_7': 'adresse_nom_voie',
-    '_8': 'adresse_code_voie',
-    '_9': 'code_postal',
-    '_10': 'code_commune',
-    '_11': 'nom_commune',
-    '_12': 'code_departement',
-    // Ajout d'autres mappings basés sur l'exemple et le schéma
-    '_28': 'nombre_lots',
-    '_29': 'code_type_local',
-    '_30': 'type_local',
-    '_31': 'surface_reelle_bati',
-    '_32': 'nombre_pieces_principales',
-    '_33': 'code_nature_culture',
-    '_34': 'nature_culture',
-    '_37': 'surface_terrain',
-    '_38': 'longitude',
-    '_39': 'latitude'
-};
-
-async function downloadFile(url, outputPath) {
-    console.log(`Téléchargement du fichier depuis ${url}...`);
-
-    // S'assurer que le répertoire existe
-    await fs.ensureDir(path.dirname(outputPath));
-
-    // Télécharger en streaming
-    const response = await axios({
-        method: 'GET',
-        url,
-        responseType: 'stream'
-    });
-
-    const writer = createWriteStream(outputPath);
-
-    response.data.pipe(writer);
-
-    return new Promise((resolve, reject) => {
-        writer.on('finish', resolve);
-        writer.on('error', reject);
-    });
-}
-
-async function extractFile(inputPath, outputPath) {
-    console.log('Extraction du fichier...');
-
-    // Nous utilisons gunzip à partir de zlib
-    const { createGunzip } = require('zlib');
-
-    await pipeline(
-        createReadStream(inputPath),
-        createGunzip(),
-        createWriteStream(outputPath)
-    );
-
-    console.log('Extraction terminée.');
-}
-
-async function processDVF(filePath) {
-    console.log('Traitement des données DVF...');
-
-    // Transaction pour l'insertion par lots
-    const client = await pool.connect();
-
+async function downloadFile() {
     try {
-        await client.query('BEGIN');
+        // Création du répertoire de données s'il n'existe pas
+        await fs.ensureDir(DATA_DIR);
 
-        let count = 0;
-        let skipped = 0;
-        const batchSize = 1000;
-        let batch = [];
-
-        // Créer un stream de lecture du CSV
-        const stream = createReadStream(filePath)
-            .pipe(csv({
-                separator: ',',
-                headers: true,
-                skipLines: 0
-            }));
-
-        // Afficher les en-têtes pour débogage
-        stream.on('headers', (headers) => {
-            console.log('En-têtes détectés:', headers.join(', '));
+        console.log('Téléchargement du fichier DVF...');
+        const response = await axios({
+            method: 'GET',
+            url: DVF_URL,
+            responseType: 'stream'
         });
 
-        // Traiter le stream ligne par ligne
-        for await (const rawData of stream) {
-            // Convertir les noms de colonnes génériques (_0, _1, etc.) en noms descriptifs
-            const data = {};
-            for (const [genericKey, value] of Object.entries(rawData)) {
-                const descriptiveKey = COLUMN_MAPPING[genericKey] || genericKey;
-                data[descriptiveKey] = value;
-            }
+        const writer = createWriteStream(FILE_PATH);
+        response.data.pipe(writer);
 
-            // Afficher les 3 premières lignes pour débogage (après conversion)
-            if (count < 3) {
-                console.log(`Ligne convertie ${count + 1}:`, JSON.stringify({
-                    id_mutation: data.id_mutation,
-                    date_mutation: data.date_mutation,
-                    code_commune: data.code_commune,
-                    nom_commune: data.nom_commune,
-                    type_local: data.type_local
-                }));
-            }
-
-            // Vérifier que les champs essentiels sont présents
-            if (!data.code_commune || !data.date_mutation) {
-                skipped++;
-                continue;
-            }
-
-            // Transformer les données pour correspondre à notre schéma
-            const transaction = {
-                id_mutation: data.id_mutation,
-                date_mutation: data.date_mutation,
-                nature_mutation: data.nature_mutation,
-                valeur_fonciere: data.valeur_fonciere ? parseFloat(data.valeur_fonciere) : null,
-                adresse_numero: data.adresse_numero,
-                adresse_suffixe: data.adresse_suffixe,
-                adresse_nom_voie: data.adresse_nom_voie,
-                adresse_code_voie: data.adresse_code_voie,
-                code_postal: data.code_postal,
-                code_commune: data.code_commune,
-                nom_commune: data.nom_commune,
-                type_local: data.type_local,
-                surface_reelle_bati: data.surface_reelle_bati ? parseFloat(data.surface_reelle_bati) : null,
-                nombre_pieces_principales: data.nombre_pieces_principales ? parseInt(data.nombre_pieces_principales) : null,
-                surface_terrain: data.surface_terrain ? parseFloat(data.surface_terrain) : null,
-                longitude: data.longitude ? parseFloat(data.longitude) : null,
-                latitude: data.latitude ? parseFloat(data.latitude) : null
-            };
-
-            // Ajouter au lot actuel
-            batch.push(transaction);
-            count++;
-
-            // Insérer par lots pour de meilleures performances
-            if (batch.length >= batchSize) {
-                await insertBatch(client, batch);
-                batch = [];
-                console.log(`${count} transactions traitées, ${skipped} ignorées...`);
-            }
-
-            // Limiter le nombre de transactions pour les tests
-            if (count >= 10000) {
-                console.log('Limite de 10 000 entrées atteinte. Arrêt du traitement.');
-                break;
-            }
-        }
-
-        // Insérer le dernier lot s'il reste des données
-        if (batch.length > 0) {
-            await insertBatch(client, batch);
-        }
-
-        await client.query('COMMIT');
-        console.log(`Traitement terminé. ${count} transactions importées, ${skipped} ignorées.`);
-
+        return new Promise((resolve, reject) => {
+            writer.on('finish', resolve);
+            writer.on('error', reject);
+        });
     } catch (error) {
-        await client.query('ROLLBACK');
-        console.error('Erreur pendant le traitement des données:', error);
+        console.error('Erreur lors du téléchargement:', error);
         throw error;
+    }
+}
+
+async function extractFile() {
+    try {
+        console.log('Extraction du fichier...');
+        await pipeline(
+            createReadStream(FILE_PATH),
+            zlib.createGunzip(),
+            createWriteStream(EXTRACTED_PATH)
+        );
+        console.log('Extraction terminée');
+    } catch (error) {
+        console.error('Erreur lors de l\'extraction:', error);
+        throw error;
+    }
+}
+
+async function getReferencesIds() {
+    const client = await pool.connect();
+    try {
+        const communesMap = new Map();
+        const typesMap = new Map();
+
+        const communesResult = await client.query('SELECT id, code_insee FROM communes');
+        communesResult.rows.forEach(row => {
+            communesMap.set(row.code_insee, row.id);
+        });
+
+        const typesResult = await client.query('SELECT id, code FROM types_bien');
+        typesResult.rows.forEach(row => {
+            typesMap.set(row.code, row.id);
+        });
+
+        return { communesMap, typesMap };
     } finally {
         client.release();
     }
 }
 
-async function insertBatch(client, batch) {
-    // Nous allons d'abord récupérer ou insérer les communes si nécessaires
-    const communeEntries = [...new Set(batch.map(t => `${t.code_commune}:${t.nom_commune}`))];
-    const communeMap = new Map();
+async function insertMissingCommunes(transactions) {
+    const client = await pool.connect();
+    try {
+        const existingResult = await client.query('SELECT code_insee FROM communes');
+        const existingCodes = new Set(existingResult.rows.map(row => row.code_insee));
 
-    for (const communeEntry of communeEntries) {
-        const [codeCommune, nomCommune] = communeEntry.split(':');
+        const uniqueCommunes = new Map();
+        transactions.forEach(transaction => {
+            if (!existingCodes.has(transaction.code_commune) && !uniqueCommunes.has(transaction.code_commune)) {
+                uniqueCommunes.set(transaction.code_commune, {
+                    code_insee: transaction.code_commune,
+                    nom: transaction.nom_commune,
+                    code_postal: transaction.code_postal,
+                    departement_id: null,
+                    latitude: transaction.latitude || null,
+                    longitude: transaction.longitude || null
+                });
+            }
+        });
 
-        if (!codeCommune) continue; // Ignorer les codes vides
+        const departementsResult = await client.query('SELECT id, code FROM departements');
+        const departementsMap = new Map();
+        departementsResult.rows.forEach(row => {
+            departementsMap.set(row.code, row.id);
+        });
 
-        try {
-            // S'assurer que le code_insee est une chaîne et qu'il a la bonne longueur
-            const codeInsee = String(codeCommune).padStart(5, '0');
+        const communesMap = new Map();
+        for (const commune of uniqueCommunes.values()) {
+            const codeDept = commune.code_insee.substring(0, commune.code_insee.length >= 3 && commune.code_insee[0] === '9' ? 3 : 2);
+            commune.departement_id = departementsMap.get(codeDept) || null;
 
-            // Vérifier si la commune existe
-            const communeResult = await client.query(
-                'SELECT id FROM communes WHERE code_insee = $1',
-                [codeInsee]
-            );
-
-            if (communeResult.rows.length > 0) {
-                // La commune existe déjà
-                communeMap.set(codeCommune, communeResult.rows[0].id);
-                console.log(`Commune existante: ${codeInsee} (${nomCommune})`);
-            } else {
-                // Si la commune n'existe pas, on l'insère avec toutes les colonnes requises
-                const newCommune = await client.query(`
-                    INSERT INTO communes (
-                        code_insee, 
-                        nom, 
-                        code_postal
-                    ) VALUES ($1, $2, $3) RETURNING id`,
-                    [
-                        codeInsee,
-                        nomCommune || `Commune ${codeInsee}`,
-                        batch.find(t => t.code_commune === codeCommune)?.code_postal || null
-                    ]
+            if (commune.departement_id) {
+                const result = await client.query(
+                    `INSERT INTO communes (code_insee, nom, code_postal, departement_id, latitude, longitude) 
+                     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+                    [commune.code_insee, commune.nom, commune.code_postal, commune.departement_id, commune.latitude, commune.longitude]
                 );
-
-                communeMap.set(codeCommune, newCommune.rows[0].id);
-                console.log(`Commune créée: ${codeInsee} (${nomCommune})`);
+                communesMap.set(commune.code_insee, result.rows[0].id);
             }
-        } catch (error) {
-            console.error(`Erreur lors du traitement de la commune ${codeCommune}:`, error.message);
-            // Afficher les détails de l'erreur pour le débogage
-            console.error("Détails:", error);
         }
+
+        return communesMap;
+    } finally {
+        client.release();
     }
+}
 
-    // Ensuite, on fait de même pour les types de bien
-    const typeLocaux = [...new Set(batch.map(t => t.type_local).filter(Boolean))];
-    const typeBienMap = new Map();
+async function insertMissingTypesBien(transactions) {
+    const client = await pool.connect();
+    try {
+        const existingResult = await client.query('SELECT code, libelle FROM types_bien');
+        const existingCodes = new Set(existingResult.rows.map(row => row.code));
 
-    for (const typeLocal of typeLocaux) {
-        try {
-            // Standardiser le code
-            const typeBienCode = typeLocal.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+        const typeMapping = {
+            'Appartement': 'APPARTEMENT',
+            'Maison': 'MAISON',
+            'Dépendance': 'DEPENDANCE',
+            'Local industriel. commercial ou assimilé': 'LOCAL_COMMERCIAL'
+        };
 
-            const typeResult = await client.query(
-                'SELECT id FROM types_bien WHERE code = $1 OR libelle = $2',
-                [typeBienCode, typeLocal]
+        const uniqueTypes = new Map();
+        transactions.forEach(transaction => {
+            if (transaction.type_local && !uniqueTypes.has(transaction.type_local)) {
+                const code = typeMapping[transaction.type_local] || transaction.type_local.toUpperCase().replace(/\s+/g, '_');
+                if (!existingCodes.has(code)) {
+                    uniqueTypes.set(transaction.type_local, {
+                        code: code,
+                        libelle: transaction.type_local
+                    });
+                }
+            }
+        });
+
+        const typesMap = new Map();
+        for (const type of uniqueTypes.values()) {
+            const result = await client.query(
+                'INSERT INTO types_bien (code, libelle) VALUES ($1, $2) RETURNING id',
+                [type.code, type.libelle]
             );
-
-            if (typeResult.rows.length > 0) {
-                typeBienMap.set(typeLocal, typeResult.rows[0].id);
-            } else {
-                const newType = await client.query(
-                    'INSERT INTO types_bien (code, libelle) VALUES ($1, $2) RETURNING id',
-                    [typeBienCode, typeLocal]
-                );
-                typeBienMap.set(typeLocal, newType.rows[0].id);
-                console.log(`Type de bien créé: ${typeBienCode} (${typeLocal})`);
-            }
-        } catch (error) {
-            console.error(`Erreur lors du traitement du type de bien ${typeLocal}:`, error.message);
+            typesMap.set(type.libelle, result.rows[0].id);
         }
+
+        return typesMap;
+    } finally {
+        client.release();
     }
+}
 
-    // Maintenant, insérer les transactions
-    let inserted = 0;
-    let failed = 0;
+async function processCSV() {
+    try {
+        console.log('Lecture du fichier CSV et insertion dans la base de données...');
 
-    for (const transaction of batch) {
+        const transactions = [];
+        let count = 0;
+
+        await new Promise((resolve, reject) => {
+            createReadStream(EXTRACTED_PATH)
+                .pipe(csv())
+                .on('data', (data) => {
+                    if (count < 10000) { // Limiter à 10000 transactions
+                        transactions.push(data);
+                        count++;
+                    }
+                })
+                .on('end', resolve)
+                .on('error', reject);
+        });
+
+        console.log(`${transactions.length} transactions lues du CSV (limité aux 10000 premières)`);
+
+        const newCommunesMap = await insertMissingCommunes(transactions);
+        const newTypesMap = await insertMissingTypesBien(transactions);
+
+        const { communesMap, typesMap } = await getReferencesIds();
+
+        for (const [code, id] of newCommunesMap.entries()) {
+            communesMap.set(code, id);
+        }
+
+        const typeLocalToIdMap = new Map();
+        const client = await pool.connect();
         try {
-            const communeId = communeMap.get(transaction.code_commune);
-
-            if (!communeId) {
-                console.log(`Commune non trouvée pour le code: ${transaction.code_commune}`);
-                failed++;
-                continue;
-            }
-
-            // Récupérer l'ID du type de bien
-            let typeBienId = null;
-            if (transaction.type_local) {
-                typeBienId = typeBienMap.get(transaction.type_local);
-            }
-
-            // Insérer la transaction
-            await client.query(`
-                INSERT INTO transactions (
-                  date_mutation, nature_mutation, valeur_fonciere, 
-                  adresse_numero, adresse_suffixe, adresse_nom_voie, adresse_code_voie,
-                  code_postal, commune_id, type_bien_id, surface_reelle_bati, 
-                  nombre_pieces, surface_terrain, longitude, latitude
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-            `, [
-                transaction.date_mutation,
-                transaction.nature_mutation,
-                transaction.valeur_fonciere,
-                transaction.adresse_numero,
-                transaction.adresse_suffixe,
-                transaction.adresse_nom_voie,
-                transaction.adresse_code_voie,
-                transaction.code_postal,
-                communeId,
-                typeBienId,
-                transaction.surface_reelle_bati,
-                transaction.nombre_pieces_principales,
-                transaction.surface_terrain,
-                transaction.longitude,
-                transaction.latitude
-            ]);
-
-            inserted++;
-        } catch (error) {
-            failed++;
-            if (failed < 5) {
-                console.error(`Erreur lors de l'insertion de la transaction ${transaction.id_mutation}:`, error.message);
-            }
+            const typeResult = await client.query('SELECT id, libelle FROM types_bien');
+            typeResult.rows.forEach(row => {
+                typeLocalToIdMap.set(row.libelle, row.id);
+            });
+        } finally {
+            client.release();
         }
-    }
 
-    console.log(`Lot traité: ${inserted} insertions réussies, ${failed} échecs`);
+        const client2 = await pool.connect();
+        try {
+            await client2.query('BEGIN');
+
+            let batchSize = 0;
+            let batchTransactions = [];
+            let totalInserted = 0;
+
+            for (const data of transactions) {
+                const communeId = communesMap.get(data.code_commune);
+                const typeBienId = data.type_local ? typeLocalToIdMap.get(data.type_local) : null;
+
+                if (communeId) {
+                    batchTransactions.push({
+                        date_mutation: data.date_mutation,
+                        nature_mutation: data.nature_mutation,
+                        valeur_fonciere: data.valeur_fonciere || null,
+                        adresse_numero: data.adresse_numero || null,
+                        adresse_suffixe: data.adresse_suffixe || null,
+                        adresse_nom_voie: data.adresse_nom_voie || null,
+                        adresse_code_voie: data.adresse_code_voie || null,
+                        code_postal: data.code_postal || null,
+                        commune_id: communeId,
+                        type_bien_id: typeBienId,
+                        surface_reelle_bati: data.surface_reelle_bati || null,
+                        nombre_pieces: data.nombre_pieces_principales || null,
+                        surface_terrain: data.surface_terrain || null,
+                        longitude: data.longitude || null,
+                        latitude: data.latitude || null
+                    });
+
+                    batchSize++;
+
+                    if (batchSize >= 1000) {
+                        await insertBatch(client2, batchTransactions);
+                        totalInserted += batchSize;
+                        console.log(`${totalInserted} transactions insérées...`);
+                        batchTransactions = [];
+                        batchSize = 0;
+                    }
+                }
+            }
+
+            if (batchSize > 0) {
+                await insertBatch(client2, batchTransactions);
+                totalInserted += batchSize;
+            }
+
+            console.log(`Insertion terminée : ${totalInserted} transactions au total`);
+            await client2.query('COMMIT');
+        } catch (error) {
+            await client2.query('ROLLBACK');
+            throw error;
+        } finally {
+            client2.release();
+        }
+    } catch (error) {
+        console.error('Erreur lors du traitement du CSV:', error);
+        throw error;
+    }
+}
+
+async function insertBatch(client, transactions) {
+    const valueStrings = [];
+    const valueParams = [];
+    let paramIndex = 1;
+
+    transactions.forEach((transaction) => {
+        const values = [
+            transaction.date_mutation,
+            transaction.nature_mutation,
+            transaction.valeur_fonciere,
+            transaction.adresse_numero,
+            transaction.adresse_suffixe,
+            transaction.adresse_nom_voie,
+            transaction.adresse_code_voie,
+            transaction.code_postal,
+            transaction.commune_id,
+            transaction.type_bien_id,
+            transaction.surface_reelle_bati,
+            transaction.nombre_pieces,
+            transaction.surface_terrain,
+            transaction.longitude,
+            transaction.latitude
+        ];
+
+        const placeholders = values.map((_, i) => `$${paramIndex + i}`).join(', ');
+        valueStrings.push(`(${placeholders})`);
+        valueParams.push(...values);
+        paramIndex += values.length;
+    });
+
+    if (valueStrings.length > 0) {
+        const query = `
+            INSERT INTO transactions (
+                date_mutation, nature_mutation, valeur_fonciere, 
+                adresse_numero, adresse_suffixe, adresse_nom_voie, adresse_code_voie, code_postal, 
+                commune_id, type_bien_id, surface_reelle_bati, nombre_pieces, surface_terrain, 
+                longitude, latitude
+            ) VALUES ${valueStrings.join(', ')}
+        `;
+
+        await client.query(query, valueParams);
+    }
 }
 
 async function main() {
     try {
-        // S'assurer que le répertoire existe
-        await fs.ensureDir(DATA_DIR);
-
-        // Télécharger le fichier
-        await downloadFile(DVF_URL, FILE_PATH);
-
-        // Extraire le fichier
-        await extractFile(FILE_PATH, EXTRACTED_PATH);
-
-        // Traiter les données
-        await processDVF(EXTRACTED_PATH);
-
-        console.log('Collecte et traitement des données DVF terminés avec succès.');
+        await downloadFile();
+        await extractFile();
+        await processCSV();
+        console.log('Traitement terminé avec succès');
     } catch (error) {
-        console.error('Erreur lors de la collecte ou du traitement des données:', error);
+        console.error('Erreur dans le processus:', error);
+        process.exit(1);
     } finally {
-        // Fermer la connexion à la base de données
-        pool.end();
+        await pool.end();
     }
 }
 
-// Exécuter le script
-main();
+async function initMissingDepartements() {
+    const client = await pool.connect();
+    try {
+        const deptCount = await client.query('SELECT COUNT(*) FROM departements');
+
+        if (parseInt(deptCount.rows[0].count) === 0) {
+            console.log('Aucun département trouvé. Initialisation des départements pour la France métropolitaine...');
+
+            const departements = [
+                {code: '01', nom: 'Ain', region_id: 84},
+                {code: '02', nom: 'Aisne', region_id: 32},
+                // Ajouter les autres départements selon vos besoins...
+                {code: '75', nom: 'Paris', region_id: 11},
+                {code: '76', nom: 'Seine-Maritime', region_id: 28},
+                {code: '77', nom: 'Seine-et-Marne', region_id: 11},
+                {code: '78', nom: 'Yvelines', region_id: 11},
+                {code: '91', nom: 'Essonne', region_id: 11},
+                {code: '92', nom: 'Hauts-de-Seine', region_id: 11},
+                {code: '93', nom: 'Seine-Saint-Denis', region_id: 11},
+                {code: '94', nom: 'Val-de-Marne', region_id: 11},
+                {code: '95', nom: 'Val-d\'Oise', region_id: 11}
+            ];
+
+            for (const dept of departements) {
+                await client.query(
+                    'INSERT INTO departements (code, nom, region_id) VALUES ($1, $2, $3) ON CONFLICT (code) DO NOTHING',
+                    [dept.code, dept.nom, dept.region_id]
+                );
+            }
+
+            console.log('Départements initialisés.');
+        }
+    } catch (error) {
+        console.error('Erreur lors de l\'initialisation des départements:', error);
+    } finally {
+        client.release();
+    }
+}
+
+async function init() {
+    try {
+        await initMissingDepartements();
+        await main();
+    } catch (error) {
+        console.error('Erreur d\'initialisation:', error);
+        process.exit(1);
+    }
+}
+
+init();

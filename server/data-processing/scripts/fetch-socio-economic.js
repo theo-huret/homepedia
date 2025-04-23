@@ -19,7 +19,7 @@ const EDUCATION_URL = 'https://data.education.gouv.fr/api/records/1.0/download/?
 
 const DATA_DIR = path.join(__dirname, '../data');
 const INCOME_PATH = path.join(DATA_DIR, 'income.zip');
-const INCOME_EXTRACTED = path.join(DATA_DIR, 'income');
+const INCOME_EXTRACTED = path.join(DATA_DIR, 'income.csv');
 const EDUCATION_PATH = path.join(DATA_DIR, 'education.csv');
 
 async function downloadFile(url, outputPath) {
@@ -55,8 +55,8 @@ async function extractZip(zipPath, outputDir) {
     console.log('Extraction terminée.');
 }
 
-async function processIncomeData(directory) {
-    console.log('Traitement des données de revenus...');
+async function processIncomeData(filePath) {
+    console.log('Traitement des nouvelles données de revenus...');
 
     const client = await pool.connect();
 
@@ -78,58 +78,45 @@ async function processIncomeData(directory) {
       )
     `);
 
-        // Trouver le fichier CSV dans le répertoire
-        const files = await fs.readdir(directory);
-        const csvFile = files.find(file => file.endsWith('.csv'));
-
-        if (!csvFile) {
-            throw new Error('Aucun fichier CSV trouvé dans le répertoire extrait.');
-        }
-
-        const filePath = path.join(directory, csvFile);
-
-        // Charger les données
         const stream = createReadStream(filePath)
             .pipe(csv({
                 separator: ';',
-                headers: true
+                mapHeaders: ({ header }) => header.trim(),
+                mapValues: ({ value }) => value.trim()
             }));
 
         for await (const data of stream) {
-            // Récupérer l'ID de la commune
+            const codeCommune = data.codgeo;
+            const annee = parseInt(data.an);
+            const revenuMedian = parseFloat(data.med_disp.replace(',', '.')) || null;
+
+            if (!codeCommune || !annee || !revenuMedian) continue;
+
             const communeResult = await client.query(
                 'SELECT id FROM communes WHERE code_insee = $1',
-                [data.CODGEO]
+                [codeCommune]
             );
 
             if (communeResult.rows.length > 0) {
                 const communeId = communeResult.rows[0].id;
 
-                // Vérifier si un enregistrement existe déjà pour cette commune et cette année
-                const checkResult = await client.query(
+                const exists = await client.query(
                     'SELECT id FROM indicateurs_economiques_communes WHERE commune_id = $1 AND annee = $2',
-                    [communeId, 2018] // Année fixe pour cet exemple
+                    [communeId, annee]
                 );
 
-                if (checkResult.rows.length === 0) {
-                    // Insérer les données
+                if (exists.rows.length === 0) {
                     await client.query(`
             INSERT INTO indicateurs_economiques_communes (
-              commune_id, annee, revenu_median, taux_pauvrete, date_maj
-            ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-          `, [
-                        communeId,
-                        2018, // Année fixe pour cet exemple
-                        parseFloat(data.MED18.replace(',', '.')) || null,
-                        parseFloat(data.TP6018.replace(',', '.')) || null
-                    ]);
+              commune_id, annee, revenu_median, date_maj
+            ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+          `, [communeId, annee, revenuMedian]);
                 }
             }
         }
 
         await client.query('COMMIT');
-        console.log('Importation des données de revenus terminée.');
-
+        console.log('Importation des nouvelles données de revenus terminée.');
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Erreur pendant le traitement des données de revenus:', error);
@@ -147,34 +134,28 @@ async function processEducationData(filePath) {
     try {
         await client.query('BEGIN');
 
-        // Créer la table si elle n'existe pas
         await client.query(`
-      CREATE TABLE IF NOT EXISTS indicateurs_education_communes (
-        id SERIAL PRIMARY KEY,
-        commune_id INTEGER REFERENCES communes(id),
-        annee INTEGER NOT NULL,
-        nb_ecoles_primaires INTEGER,
-        nb_colleges INTEGER,
-        nb_lycees INTEGER,
-        nb_universites INTEGER,
-        date_maj TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(commune_id, annee)
-      )
-    `);
+            CREATE TABLE IF NOT EXISTS indicateurs_education_communes (
+                id SERIAL PRIMARY KEY,
+                commune_id INTEGER REFERENCES communes(id),
+                annee INTEGER NOT NULL,
+                nb_ecoles_primaires INTEGER,
+                nb_colleges INTEGER,
+                nb_lycees INTEGER,
+                nb_universites INTEGER,
+                date_maj TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(commune_id, annee)
+            )
+        `);
 
-        // Initialiser les compteurs
         const schoolCounts = {};
 
-        // Charger les données
         const stream = createReadStream(filePath)
-            .pipe(csv({
-                separator: ',',
-                headers: true
-            }));
+            .pipe(csv({ separator: ';' }));
 
         for await (const data of stream) {
             const codeCommune = data.code_commune;
-            const typeEtablissement = data.type_etablissement;
+            const typeEtablissement = data.nature_uai_libe;
 
             if (codeCommune && typeEtablissement) {
                 if (!schoolCounts[codeCommune]) {
@@ -186,22 +167,21 @@ async function processEducationData(filePath) {
                     };
                 }
 
-                // Incrémenter le compteur correspondant
-                if (typeEtablissement.includes('ECOLE')) {
+                const type = typeEtablissement.toUpperCase();
+
+                if (type.includes('ECOLE')) {
                     schoolCounts[codeCommune].primaire++;
-                } else if (typeEtablissement.includes('COLLEGE')) {
+                } else if (type.includes('COLLEGE')) {
                     schoolCounts[codeCommune].college++;
-                } else if (typeEtablissement.includes('LYCEE')) {
+                } else if (type.includes('LYCEE')) {
                     schoolCounts[codeCommune].lycee++;
-                } else if (typeEtablissement.includes('UNIVERSITE') || typeEtablissement.includes('SUP')) {
+                } else if (type.includes('UNIVERSITE') || type.includes('SUP')) {
                     schoolCounts[codeCommune].universite++;
                 }
             }
         }
 
-        // Insérer les données agrégées
         for (const [codeCommune, counts] of Object.entries(schoolCounts)) {
-            // Récupérer l'ID de la commune
             const communeResult = await client.query(
                 'SELECT id FROM communes WHERE code_insee = $1',
                 [codeCommune]
@@ -210,27 +190,27 @@ async function processEducationData(filePath) {
             if (communeResult.rows.length > 0) {
                 const communeId = communeResult.rows[0].id;
 
-                // Vérifier si un enregistrement existe déjà pour cette commune et cette année
                 const checkResult = await client.query(
                     'SELECT id FROM indicateurs_education_communes WHERE commune_id = $1 AND annee = $2',
-                    [communeId, 2022] // Année en cours
+                    [communeId, 2022]
                 );
 
                 if (checkResult.rows.length === 0) {
-                    // Insérer les données
                     await client.query(`
-            INSERT INTO indicateurs_education_communes (
-              commune_id, annee, nb_ecoles_primaires, nb_colleges, nb_lycees, nb_universites, date_maj
-            ) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
-          `, [
+                        INSERT INTO indicateurs_education_communes (
+                            commune_id, annee, nb_ecoles_primaires, nb_colleges, nb_lycees, nb_universites, date_maj
+                        ) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+                    `, [
                         communeId,
-                        2022, // Année en cours
+                        2022,
                         counts.primaire,
                         counts.college,
                         counts.lycee,
                         counts.universite
                     ]);
                 }
+            } else {
+                console.warn(`Commune INSEE ${codeCommune} non trouvée dans la base`);
             }
         }
 
@@ -249,11 +229,7 @@ async function processEducationData(filePath) {
 async function main() {
     try {
         // Télécharger les fichiers
-        await downloadFile(INCOME_URL, INCOME_PATH);
         await downloadFile(EDUCATION_URL, EDUCATION_PATH);
-
-        // Extraire le fichier zip des revenus
-        await extractZip(INCOME_PATH, INCOME_EXTRACTED);
 
         // Traiter les données
         await processIncomeData(INCOME_EXTRACTED);

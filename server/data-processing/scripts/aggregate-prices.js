@@ -3,7 +3,6 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-// Connexion à PostgreSQL
 const pool = new Pool({
     connectionString: process.env.POSTGRES_URI || 'postgres://postgres:postgres@localhost:5432/homepedia'
 });
@@ -16,10 +15,7 @@ async function aggregatePricesCommunes() {
     try {
         await client.query('BEGIN');
 
-        // Supprimer les données existantes
         await client.query('TRUNCATE TABLE prix_moyens_communes');
-
-        // Agréger par commune, type de bien, année et trimestre
         await client.query(`
       INSERT INTO prix_moyens_communes (
         commune_id, type_bien_id, annee, trimestre, prix_moyen_m2, nombre_transactions
@@ -63,8 +59,6 @@ async function aggregatePricesDepartements() {
 
     try {
         await client.query('BEGIN');
-
-        // Vérifier si la table existe, sinon la créer
         await client.query(`
       CREATE TABLE IF NOT EXISTS prix_moyens_departements (
         id SERIAL PRIMARY KEY,
@@ -79,10 +73,7 @@ async function aggregatePricesDepartements() {
       )
     `);
 
-        // Supprimer les données existantes
         await client.query('TRUNCATE TABLE prix_moyens_departements');
-
-        // Agréger par département, type de bien, année et trimestre
         await client.query(`
       INSERT INTO prix_moyens_departements (
         departement_id, type_bien_id, annee, trimestre, prix_moyen_m2, nombre_transactions
@@ -121,10 +112,8 @@ async function main() {
     } catch (error) {
         console.error('Erreur lors de l\'agrégation des prix:', error);
     } finally {
-        // Fermer la connexion à la base de données
         pool.end();
     }
 }
 
-// Exécuter le script
 main();

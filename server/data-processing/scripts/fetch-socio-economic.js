@@ -8,24 +8,19 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-// Connexion à PostgreSQL
 const pool = new Pool({
     connectionString: process.env.POSTGRES_URI || 'postgres://postgres:postgres@localhost:5432/homepedia'
 });
 
-// Définition des URLs
-const INCOME_URL = 'https://www.insee.fr/fr/statistiques/fichier/6692291/FILO2019_DISP_COM.zip';
 const EDUCATION_URL = 'https://data.education.gouv.fr/api/records/1.0/download/?dataset=fr-en-adresse-et-geolocalisation-etablissements-premier-et-second-degre';
 
 const DATA_DIR = path.join(__dirname, '../data');
-const INCOME_PATH = path.join(DATA_DIR, 'income.zip');
 const INCOME_EXTRACTED = path.join(DATA_DIR, 'income.csv');
 const EDUCATION_PATH = path.join(DATA_DIR, 'education.csv');
 
 async function downloadFile(url, outputPath) {
     console.log(`Téléchargement du fichier depuis ${url}...`);
 
-    // S'assurer que le répertoire existe
     await fs.ensureDir(path.dirname(outputPath));
 
     const response = await axios({
@@ -44,17 +39,6 @@ async function downloadFile(url, outputPath) {
     });
 }
 
-async function extractZip(zipPath, outputDir) {
-    console.log(`Extraction du fichier ${zipPath}...`);
-
-    const extract = require('extract-zip');
-
-    await fs.ensureDir(outputDir);
-    await extract(zipPath, { dir: outputDir });
-
-    console.log('Extraction terminée.');
-}
-
 async function processIncomeData(filePath) {
     console.log('Traitement des nouvelles données de revenus...');
 
@@ -62,8 +46,6 @@ async function processIncomeData(filePath) {
 
     try {
         await client.query('BEGIN');
-
-        // Créer la table si elle n'existe pas
         await client.query(`
       CREATE TABLE IF NOT EXISTS indicateurs_economiques_communes (
         id SERIAL PRIMARY KEY,
@@ -239,10 +221,8 @@ async function main() {
     } catch (error) {
         console.error('Erreur lors de la collecte ou du traitement des données:', error);
     } finally {
-        // Fermer la connexion à la base de données
         pool.end();
     }
 }
 
-// Exécuter le script
 main();

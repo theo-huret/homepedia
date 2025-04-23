@@ -1,14 +1,17 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Box, Typography } from '@mui/material';
 
 const MAPBOX_TOKEN = 'pk.eyJ1Ijoic3RvbXBhciIsImEiOiJjbTlzbTEyZ3owMXhqMnJyNm1meGc1YXd1In0.IQecquzqoSmFlMraw4J0oA';
 
-const MapComponent = ({ region, indicator }) => {
+const MapComponent = ({ region, indicator, data = [] }) => {
     const mapContainer = useRef(null);
     const map = useRef(null);
+    const [legendData, setLegendData] = useState(null);
+    const markersRef = useRef([]);
 
+    // Initialiser la carte
     useEffect(() => {
         if (!mapContainer.current) return;
 
@@ -25,38 +28,179 @@ const MapComponent = ({ region, indicator }) => {
             map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
         }
 
+        return () => {
+            // Nettoyage au démontage du composant
+            markersRef.current.forEach(marker => marker.remove());
+            markersRef.current = [];
+        };
+    }, []);
+
+    // Centrer la carte sur la région sélectionnée
+    useEffect(() => {
+        if (!map.current) return;
+
         if (region) {
+            // Ces valeurs sont fictives, il faudrait les remplacer par les vraies coordonnées
             const regionCoordinates = {
-                'ile-de-france': { center: [2.3522, 48.8566], zoom: 8 },
-                'auvergne-rhone-alpes': { center: [4.3872, 45.4397], zoom: 7 },
-                'nouvelle-aquitaine': { center: [-0.5795, 44.8378], zoom: 7 },
-                'occitanie': { center: [1.4442, 43.6047], zoom: 7 },
-                'hauts-de-france': { center: [2.7883, 50.6292], zoom: 7 },
-                'grand-est': { center: [5.5734, 48.6998], zoom: 7 },
-                'provence-alpes-cote-dazur': { center: [5.9459, 43.5298], zoom: 7 },
-                'normandie': { center: [0.1043, 49.2733], zoom: 7 },
-                'bretagne': { center: [-2.7601, 48.1142], zoom: 7 },
-                'pays-de-la-loire': { center: [-0.8545, 47.4784], zoom: 7 },
-                'bourgogne-franche-comte': { center: [5.0414, 47.2803], zoom: 7 },
-                'centre-val-de-loire': { center: [1.6790, 47.7511], zoom: 7 }
+                '11': { center: [2.3522, 48.8566], zoom: 8 }, // Île-de-France
+                '84': { center: [4.3872, 45.4397], zoom: 7 }, // Auvergne-Rhône-Alpes
+                '75': { center: [-0.5795, 44.8378], zoom: 7 }, // Nouvelle-Aquitaine
+                '76': { center: [1.4442, 43.6047], zoom: 7 }, // Occitanie
+                '32': { center: [2.7883, 50.6292], zoom: 7 }, // Hauts-de-France
+                '44': { center: [5.5734, 48.6998], zoom: 7 }, // Grand Est
+                '93': { center: [5.9459, 43.5298], zoom: 7 }, // Provence-Alpes-Côte d'Azur
+                '28': { center: [0.1043, 49.2733], zoom: 7 }, // Normandie
+                '53': { center: [-2.7601, 48.1142], zoom: 7 }, // Bretagne
+                '52': { center: [-0.8545, 47.4784], zoom: 7 }, // Pays de la Loire
+                '27': { center: [5.0414, 47.2803], zoom: 7 }, // Bourgogne-Franche-Comté
+                '24': { center: [1.6790, 47.7511], zoom: 7 }  // Centre-Val de Loire
             };
 
-            if (regionCoordinates[region]) {
+            const regionId = region.toString();
+            if (regionCoordinates[regionId]) {
                 map.current.flyTo({
-                    center: regionCoordinates[region].center,
-                    zoom: regionCoordinates[region].zoom,
+                    center: regionCoordinates[regionId].center,
+                    zoom: regionCoordinates[regionId].zoom,
                     essential: true
                 });
             }
+        } else {
+            // Vue d'ensemble de la France
+            map.current.flyTo({
+                center: [2.213749, 46.227638],
+                zoom: 5,
+                essential: true
+            });
+        }
+    }, [region]);
+
+    // Afficher les données sur la carte
+    useEffect(() => {
+        if (!map.current || !data || data.length === 0) return;
+
+        // Fonction pour obtenir une couleur en fonction de la valeur
+        const getColor = (value) => {
+            if (indicator === 'prix') {
+                if (value > 8000) return '#0d47a1';  // Bleu très foncé
+                if (value > 5000) return '#1976d2';  // Bleu foncé
+                if (value > 3000) return '#42a5f5';  // Bleu moyen
+                if (value > 2000) return '#90caf9';  // Bleu clair
+                return '#bbdefb';                    // Bleu très clair
+            } else if (indicator === 'evolution') {
+                if (value > 10) return '#1b5e20';    // Vert foncé (forte hausse)
+                if (value > 5) return '#4caf50';     // Vert moyen
+                if (value > 0) return '#a5d6a7';     // Vert clair
+                if (value > -5) return '#ffcdd2';    // Rouge clair
+                return '#e57373';                    // Rouge moyen (forte baisse)
+            } else {
+                if (value > 5000) return '#4a148c';  // Violet foncé
+                if (value > 1000) return '#7b1fa2';  // Violet moyen
+                if (value > 500) return '#9c27b0';   // Violet
+                if (value > 100) return '#ba68c8';   // Violet clair
+                return '#e1bee7';                    // Violet très clair
+            }
+        };
+
+        // Mettre à jour la légende
+        if (indicator === 'prix') {
+            setLegendData([
+                { color: '#0d47a1', label: '> 8000 €/m²' },
+                { color: '#1976d2', label: '5000-8000 €/m²' },
+                { color: '#42a5f5', label: '3000-5000 €/m²' },
+                { color: '#90caf9', label: '2000-3000 €/m²' },
+                { color: '#bbdefb', label: '< 2000 €/m²' }
+            ]);
+        } else if (indicator === 'evolution') {
+            setLegendData([
+                { color: '#1b5e20', label: '> +10%' },
+                { color: '#4caf50', label: '+5% à +10%' },
+                { color: '#a5d6a7', label: '0% à +5%' },
+                { color: '#ffcdd2', label: '-5% à 0%' },
+                { color: '#e57373', label: '< -5%' }
+            ]);
+        } else {
+            setLegendData([
+                { color: '#4a148c', label: '> 5000' },
+                { color: '#7b1fa2', label: '1000-5000' },
+                { color: '#9c27b0', label: '500-1000' },
+                { color: '#ba68c8', label: '100-500' },
+                { color: '#e1bee7', label: '< 100' }
+            ]);
         }
 
-        return () => {};
-    }, [region]);
+        // Nettoyer les marqueurs existants
+        markersRef.current.forEach(marker => marker.remove());
+        markersRef.current = [];
+
+        // Ajouter les nouveaux marqueurs
+        data.forEach(item => {
+            let value;
+            if (indicator === 'prix') {
+                value = item.prix_moyen_m2;
+            } else if (indicator === 'evolution') {
+                value = item.evolution_prix;
+            } else {
+                value = item.nombre_transactions;
+            }
+
+            if (!value) return;
+
+            const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
+                <div style="padding: 10px;">
+                    <h4 style="margin: 0 0 8px 0;">${item.nom}</h4>
+                    <p style="margin: 0;">${indicator === 'prix' ? 'Prix moyen: ' + value + ' €/m²' :
+                (indicator === 'evolution' ? 'Évolution: ' + value + '%' :
+                    'Transactions: ' + value)}</p>
+                </div>
+            `);
+
+            // Si nous avons des coordonnées directes
+            if (item.latitude && item.longitude) {
+                const marker = new mapboxgl.Marker({
+                    color: getColor(value)
+                })
+                    .setLngLat([item.longitude, item.latitude])
+                    .setPopup(popup)
+                    .addTo(map.current);
+
+                markersRef.current.push(marker);
+            }
+            // Si nous avons seulement un code (pour les régions/départements)
+            else {
+                // Ici, vous pourriez ajouter une logique pour obtenir les coordonnées à partir du code
+                // ou utiliser GeoJSON pour afficher les frontières des régions/départements
+                console.log(`Pas de coordonnées disponibles pour ${item.nom}`);
+            }
+        });
+
+    }, [data, indicator]);
 
     return (
         <>
             {!MAPBOX_TOKEN.includes('example') ? (
-                <Box ref={mapContainer} sx={{ width: '100%', height: '100%' }} />
+                <Box sx={{ width: '100%', height: '100%', position: 'relative' }}>
+                    <Box ref={mapContainer} sx={{ width: '100%', height: '100%' }} />
+                    {legendData && (
+                        <Box sx={{
+                            position: 'absolute',
+                            bottom: 20,
+                            right: 20,
+                            backgroundColor: 'rgba(255,255,255,0.8)',
+                            padding: 2,
+                            borderRadius: 1,
+                            boxShadow: 1,
+                            zIndex: 1
+                        }}>
+                            <Typography variant="subtitle2" gutterBottom>Légende</Typography>
+                            {legendData.map((item, index) => (
+                                <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                                    <Box sx={{ width: 16, height: 16, backgroundColor: item.color, mr: 1 }} />
+                                    <Typography variant="caption">{item.label}</Typography>
+                                </Box>
+                            ))}
+                        </Box>
+                    )}
+                </Box>
             ) : (
                 <Box
                     sx={{

@@ -21,7 +21,6 @@ const EXTRACTED_PATH = path.join(DATA_DIR, 'dvf_2022.csv');
 
 async function downloadFile() {
     try {
-        // Création du répertoire de données s'il n'existe pas
         await fs.ensureDir(DATA_DIR);
 
         console.log('Téléchargement du fichier DVF...');

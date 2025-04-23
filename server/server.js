@@ -1,17 +1,22 @@
 const express = require('express');
 const cors = require('cors');
-const mongoose = require('mongoose');
 const { Pool } = require('pg');
+const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
 const compression = require('compression');
+const errorHandler = require('./middlewares/errorHandler');
+const routes = require('./routes');
 
 dotenv.config();
 
 const app = express();
 
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    credentials: true
+}));
 app.use(helmet());
 app.use(compression());
 
@@ -19,21 +24,28 @@ const pgPool = new Pool({
     connectionString: process.env.POSTGRES_URI || 'postgres://postgres:postgres@localhost:5432/homepedia'
 });
 
-app.use(cors({
-    origin: 'http://localhost:3000',
-    credentials: true
-}));
-
-mongoose.connect(process.env.MONGO_URI || 'mongodb+srv://mongodb:mongodb@homepedia.71keulw.mongodb.net/?retryWrites=true&w=majority&appName=homepedia', {
+mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/homepedia', {
     useNewUrlParser: true,
     useUnifiedTopology: true
 })
-    .then(() => console.log('MongoDB Connected'))
     .catch(err => console.log('MongoDB Connection Error:', err));
 
 app.get('/', (req, res) => {
-    res.send('HOMEPEDIA API is running');
+    res.send('HOMEPEDIA API est en ligne');
+});
+
+app.use('/api', routes);
+app.use(errorHandler);
+app.use('*', (req, res) => {
+    res.status(404).json({
+        success: false,
+        message: `Route non trouvée: ${req.originalUrl}`
+    });
 });
 
 const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+app.listen(PORT, () => {
+    console.log(`Serveur HOMEPEDIA en cours d'exécution sur le port ${PORT}`);
+    console.log(`API accessible à l'adresse: http://localhost:${PORT}/api`);
+});

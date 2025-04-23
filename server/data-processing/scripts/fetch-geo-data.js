@@ -4,12 +4,10 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-// Connexion à PostgreSQL
 const pool = new Pool({
     connectionString: process.env.POSTGRES_URI || 'postgres://postgres:postgres@localhost:5432/homepedia'
 });
 
-// URLs de l'API Geo
 const API_REGIONS_URL = 'https://geo.api.gouv.fr/regions';
 const API_DEPARTEMENTS_URL = 'https://geo.api.gouv.fr/departements';
 const API_COMMUNES_URL = 'https://geo.api.gouv.fr/communes';
@@ -22,7 +20,6 @@ async function fetchRegions() {
         return response.data;
     } catch (error) {
         console.error(`Erreur lors de la récupération des régions: ${error.message}`);
-        // Retourner des données par défaut en cas d'échec
         return [
             { code: '11', nom: 'Île-de-France' },
             { code: '93', nom: 'Provence-Alpes-Côte d\'Azur' },
@@ -49,7 +46,6 @@ async function fetchDepartements() {
         return response.data;
     } catch (error) {
         console.error(`Erreur lors de la récupération des départements: ${error.message}`);
-        // Retourner des données par défaut en cas d'échec
         return [
             { code: '75', nom: 'Paris', codeRegion: '11' },
             { code: '69', nom: 'Rhône', codeRegion: '84' },
@@ -69,13 +65,10 @@ async function fetchCommunes(limit = 5000) {
     console.log(`Récupération des communes depuis l'API Geo (limité à ${limit})...`);
 
     try {
-        // L'API Geo a une limite de résultats, on peut paginer ou filtrer
-        // Ici on utilise le paramètre fields pour limiter les données
         const response = await axios.get(`${API_COMMUNES_URL}?fields=nom,code,codeDepartement,centre,codesPostaux&limit=${limit}`);
         return response.data;
     } catch (error) {
         console.error(`Erreur lors de la récupération des communes: ${error.message}`);
-        // Retourner des données par défaut en cas d'échec (grandes villes)
         return [
             { code: '75056', codesPostaux: ['75001', '75002', '75003', '75004', '75005', '75006', '75007', '75008', '75009', '75010', '75011', '75012', '75013', '75014', '75015', '75016', '75017', '75018', '75019', '75020'], nom: 'Paris', codeDepartement: '75', centre: { type: 'Point', coordinates: [2.3522219, 48.856614] } },
             { code: '13055', codesPostaux: ['13001', '13002', '13003', '13004', '13005', '13006', '13007', '13008', '13009', '13010', '13011', '13012', '13013', '13014', '13015', '13016'], nom: 'Marseille', codeDepartement: '13', centre: { type: 'Point', coordinates: [5.36978, 43.296482] } },
@@ -98,8 +91,6 @@ async function importRegions(regions) {
 
     try {
         await client.query('BEGIN');
-
-        // Vider la table existante
         await client.query('TRUNCATE TABLE regions CASCADE');
 
         for (const region of regions) {
@@ -129,12 +120,9 @@ async function importDepartements(departements) {
 
     try {
         await client.query('BEGIN');
-
-        // Vider la table existante
         await client.query('TRUNCATE TABLE departements CASCADE');
 
         for (const dept of departements) {
-            // Récupérer l'ID de la région
             const codeRegion = dept.codeRegion || dept.region_code;
 
             if (!codeRegion) {
@@ -180,15 +168,12 @@ async function importCommunes(communes) {
 
     try {
         await client.query('BEGIN');
-
-        // Vider la table existante
         await client.query('TRUNCATE TABLE communes CASCADE');
 
         let count = 0;
         const total = communes.length;
 
         for (const commune of communes) {
-            // Récupérer l'ID du département
             const codeDept = commune.codeDepartement;
 
             if (!codeDept) {
@@ -208,17 +193,14 @@ async function importCommunes(communes) {
                 console.log(`Département non trouvé pour le code: ${codeDept}`);
             }
 
-            // Récupérer le code postal (prendre le premier s'il y en a plusieurs)
             const codePostal = Array.isArray(commune.codesPostaux) && commune.codesPostaux.length > 0
                 ? commune.codesPostaux[0]
                 : commune.codePostal || null;
 
-            // Récupérer les coordonnées
             let latitude = null;
             let longitude = null;
 
             if (commune.centre && commune.centre.coordinates) {
-                // L'API Geo utilise [longitude, latitude]
                 longitude = commune.centre.coordinates[0];
                 latitude = commune.centre.coordinates[1];
             }
@@ -258,12 +240,10 @@ async function main() {
     try {
         console.log('Démarrage de la collecte des données géographiques via l\'API Geo...');
 
-        // Récupérer les données
         const regions = await fetchRegions();
         const departements = await fetchDepartements();
-        const communes = await fetchCommunes(9999999999); // Limiter à 10000 communes
+        const communes = await fetchCommunes(50000);
 
-        // Importer dans la base de données
         const regionsImported = await importRegions(regions);
 
         if (regionsImported) {
@@ -278,10 +258,8 @@ async function main() {
     } catch (error) {
         console.error('Erreur lors de la collecte ou du traitement des données:', error);
     } finally {
-        // Fermer la connexion à la base de données
         pool.end();
     }
 }
 
-// Exécuter le script
 main();

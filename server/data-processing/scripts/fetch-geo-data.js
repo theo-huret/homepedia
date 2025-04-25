@@ -65,22 +65,98 @@ async function fetchCommunes(limit = 5000) {
     console.log(`Récupération des communes depuis l'API Geo (limité à ${limit})...`);
 
     try {
-        const response = await axios.get(`${API_COMMUNES_URL}?fields=nom,code,codeDepartement,centre,codesPostaux&limit=${limit}`);
+        const response = await axios.get(`${API_COMMUNES_URL}?fields=nom,code,codeDepartement,centre,codesPostaux,population,surface&limit=${limit}`);
         return response.data;
     } catch (error) {
         console.error(`Erreur lors de la récupération des communes: ${error.message}`);
         return [
-            { code: '75056', codesPostaux: ['75001', '75002', '75003', '75004', '75005', '75006', '75007', '75008', '75009', '75010', '75011', '75012', '75013', '75014', '75015', '75016', '75017', '75018', '75019', '75020'], nom: 'Paris', codeDepartement: '75', centre: { type: 'Point', coordinates: [2.3522219, 48.856614] } },
-            { code: '13055', codesPostaux: ['13001', '13002', '13003', '13004', '13005', '13006', '13007', '13008', '13009', '13010', '13011', '13012', '13013', '13014', '13015', '13016'], nom: 'Marseille', codeDepartement: '13', centre: { type: 'Point', coordinates: [5.36978, 43.296482] } },
-            { code: '69123', codesPostaux: ['69001', '69002', '69003', '69004', '69005', '69006', '69007', '69008', '69009'], nom: 'Lyon', codeDepartement: '69', centre: { type: 'Point', coordinates: [4.835659, 45.764043] } },
-            { code: '31555', codesPostaux: ['31000'], nom: 'Toulouse', codeDepartement: '31', centre: { type: 'Point', coordinates: [1.444, 43.6043] } },
-            { code: '06088', codesPostaux: ['06000'], nom: 'Nice', codeDepartement: '06', centre: { type: 'Point', coordinates: [7.2661, 43.7032] } },
-            { code: '44109', codesPostaux: ['44000'], nom: 'Nantes', codeDepartement: '44', centre: { type: 'Point', coordinates: [-1.5534, 47.2173] } },
-            { code: '67482', codesPostaux: ['67000'], nom: 'Strasbourg', codeDepartement: '67', centre: { type: 'Point', coordinates: [7.7521, 48.5734] } },
-            { code: '33063', codesPostaux: ['33000'], nom: 'Bordeaux', codeDepartement: '33', centre: { type: 'Point', coordinates: [-0.5792, 44.8378] } },
-            { code: '59350', codesPostaux: ['59000'], nom: 'Lille', codeDepartement: '59', centre: { type: 'Point', coordinates: [3.0573, 50.6292] } },
-            { code: '35238', codesPostaux: ['35000'], nom: 'Rennes', codeDepartement: '35', centre: { type: 'Point', coordinates: [-1.6778, 48.1173] } }
+            { code: '75056', codesPostaux: ['75001', '75002', '75003', '75004', '75005', '75006', '75007', '75008', '75009', '75010', '75011', '75012', '75013', '75014', '75015', '75016', '75017', '75018', '75019', '75020'], nom: 'Paris', codeDepartement: '75', centre: { type: 'Point', coordinates: [2.3522219, 48.856614] }, population: 2165423, surface: 10540 },
+            { code: '13055', codesPostaux: ['13001', '13002', '13003', '13004', '13005', '13006', '13007', '13008', '13009', '13010', '13011', '13012', '13013', '13014', '13015', '13016'], nom: 'Marseille', codeDepartement: '13', centre: { type: 'Point', coordinates: [5.36978, 43.296482] }, population: 863310, surface: 24062 },
+            { code: '69123', codesPostaux: ['69001', '69002', '69003', '69004', '69005', '69006', '69007', '69008', '69009'], nom: 'Lyon', codeDepartement: '69', centre: { type: 'Point', coordinates: [4.835659, 45.764043] }, population: 516092, surface: 4787 },
+            { code: '31555', codesPostaux: ['31000'], nom: 'Toulouse', codeDepartement: '31', centre: { type: 'Point', coordinates: [1.444, 43.6043] }, population: 479553, surface: 11830 },
+            { code: '06088', codesPostaux: ['06000'], nom: 'Nice', codeDepartement: '06', centre: { type: 'Point', coordinates: [7.2661, 43.7032] }, population: 340017, surface: 7192 },
+            { code: '44109', codesPostaux: ['44000'], nom: 'Nantes', codeDepartement: '44', centre: { type: 'Point', coordinates: [-1.5534, 47.2173] }, population: 309346, surface: 6562 },
+            { code: '67482', codesPostaux: ['67000'], nom: 'Strasbourg', codeDepartement: '67', centre: { type: 'Point', coordinates: [7.7521, 48.5734] }, population: 283515, surface: 7837 },
+            { code: '33063', codesPostaux: ['33000'], nom: 'Bordeaux', codeDepartement: '33', centre: { type: 'Point', coordinates: [-0.5792, 44.8378] }, population: 254436, surface: 4936 },
+            { code: '59350', codesPostaux: ['59000'], nom: 'Lille', codeDepartement: '59', centre: { type: 'Point', coordinates: [3.0573, 50.6292] }, population: 232440, surface: 3489 },
+            { code: '35238', codesPostaux: ['35000'], nom: 'Rennes', codeDepartement: '35', centre: { type: 'Point', coordinates: [-1.6778, 48.1173] }, population: 216815, surface: 5035 }
         ];
+    }
+}
+
+async function checkAndCreateColumnsIfNeeded() {
+    console.log('Vérification et création des colonnes population et superficie si nécessaires...');
+
+    const client = await pool.connect();
+
+    try {
+        const communesCheck = `
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'communes' 
+            AND column_name IN ('population', 'superficie')
+        `;
+
+        const communesResult = await client.query(communesCheck);
+        const existingCommunesColumns = new Set(communesResult.rows.map(row => row.column_name));
+
+        if (!existingCommunesColumns.has('population')) {
+            console.log('Ajout de la colonne population pour les communes...');
+            await client.query('ALTER TABLE communes ADD COLUMN population INTEGER');
+        }
+
+        if (!existingCommunesColumns.has('superficie')) {
+            console.log('Ajout de la colonne superficie pour les communes...');
+            await client.query('ALTER TABLE communes ADD COLUMN superficie FLOAT');
+        }
+
+        // Départements
+        const departementsCheck = `
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'departements' 
+            AND column_name IN ('population', 'superficie')
+        `;
+
+        const departementsResult = await client.query(departementsCheck);
+        const existingDepartementsColumns = new Set(departementsResult.rows.map(row => row.column_name));
+
+        if (!existingDepartementsColumns.has('population')) {
+            console.log('Ajout de la colonne population pour les départements...');
+            await client.query('ALTER TABLE departements ADD COLUMN population INTEGER');
+        }
+
+        if (!existingDepartementsColumns.has('superficie')) {
+            console.log('Ajout de la colonne superficie pour les départements...');
+            await client.query('ALTER TABLE departements ADD COLUMN superficie FLOAT');
+        }
+
+        const regionsCheck = `
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'regions' 
+            AND column_name IN ('population', 'superficie')
+        `;
+
+        const regionsResult = await client.query(regionsCheck);
+        const existingRegionsColumns = new Set(regionsResult.rows.map(row => row.column_name));
+
+        if (!existingRegionsColumns.has('population')) {
+            console.log('Ajout de la colonne population pour les régions...');
+            await client.query('ALTER TABLE regions ADD COLUMN population INTEGER');
+        }
+
+        if (!existingRegionsColumns.has('superficie')) {
+            console.log('Ajout de la colonne superficie pour les régions...');
+            await client.query('ALTER TABLE regions ADD COLUMN superficie FLOAT');
+        }
+
+        console.log('Vérification des colonnes terminée.');
+
+    } catch (error) {
+        console.error('Erreur lors de la vérification ou création des colonnes:', error);
+    } finally {
+        client.release();
     }
 }
 
@@ -95,9 +171,14 @@ async function importRegions(regions) {
 
         for (const region of regions) {
             await client.query(`
-                INSERT INTO regions (code, nom)
-                VALUES ($1, $2)
-            `, [region.code, region.nom]);
+                INSERT INTO regions (code, nom, population, superficie)
+                VALUES ($1, $2, $3, $4)
+            `, [
+                region.code,
+                region.nom,
+                null,
+                null
+            ]);
         }
 
         console.log(`Importation de ${regions.length} régions terminée.`);
@@ -143,9 +224,15 @@ async function importDepartements(departements) {
             }
 
             await client.query(`
-                INSERT INTO departements (code, nom, region_id)
-                VALUES ($1, $2, $3)
-            `, [dept.code, dept.nom, regionId]);
+                INSERT INTO departements (code, nom, region_id, population, superficie)
+                VALUES ($1, $2, $3, $4, $5)
+            `, [
+                dept.code,
+                dept.nom,
+                regionId,
+                null,
+                null
+            ]);
         }
 
         console.log(`Importation de ${departements.length} départements terminée.`);
@@ -205,16 +292,24 @@ async function importCommunes(communes) {
                 latitude = commune.centre.coordinates[1];
             }
 
+            const population = commune.population || null;
+            const superficie = commune.surface || null;
+
             await client.query(`
-                INSERT INTO communes (code_insee, code_postal, nom, departement_id, latitude, longitude)
-                VALUES ($1, $2, $3, $4, $5, $6)
+                INSERT INTO communes (
+                    code_insee, code_postal, nom, departement_id, 
+                    latitude, longitude, population, superficie
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             `, [
                 commune.code,
                 codePostal,
                 commune.nom,
                 deptId,
                 latitude,
-                longitude
+                longitude,
+                population,
+                superficie
             ]);
 
             count++;
@@ -236,9 +331,121 @@ async function importCommunes(communes) {
     }
 }
 
+async function updateDepartementsStats() {
+    console.log('Mise à jour des statistiques des départements...');
+
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+
+        const updatePopulationQuery = `
+            UPDATE departements d
+            SET population = (
+                SELECT SUM(c.population)
+                FROM communes c
+                WHERE c.departement_id = d.id
+                  AND c.population IS NOT NULL
+            )
+            WHERE EXISTS (
+                SELECT 1
+                FROM communes c
+                WHERE c.departement_id = d.id
+                  AND c.population IS NOT NULL
+            )
+        `;
+
+        await client.query(updatePopulationQuery);
+
+        const updateSuperficieQuery = `
+            UPDATE departements d
+            SET superficie = (
+                SELECT SUM(c.superficie)
+                FROM communes c
+                WHERE c.departement_id = d.id
+                  AND c.superficie IS NOT NULL
+            )
+            WHERE EXISTS (
+                SELECT 1
+                FROM communes c
+                WHERE c.departement_id = d.id
+                  AND c.superficie IS NOT NULL
+            )
+        `;
+
+        await client.query(updateSuperficieQuery);
+
+        await client.query('COMMIT');
+        console.log('Statistiques des départements mises à jour.');
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Erreur pendant la mise à jour des statistiques des départements:', error);
+    } finally {
+        client.release();
+    }
+}
+
+async function updateRegionsStats() {
+    console.log('Mise à jour des statistiques des régions...');
+
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+
+        const updatePopulationQuery = `
+            UPDATE regions r
+            SET population = (
+                SELECT SUM(d.population)
+                FROM departements d
+                WHERE d.region_id = r.id
+                  AND d.population IS NOT NULL
+            )
+            WHERE EXISTS (
+                SELECT 1
+                FROM departements d
+                WHERE d.region_id = r.id
+                  AND d.population IS NOT NULL
+            )
+        `;
+
+        await client.query(updatePopulationQuery);
+
+        const updateSuperficieQuery = `
+            UPDATE regions r
+            SET superficie = (
+                SELECT SUM(d.superficie)
+                FROM departements d
+                WHERE d.region_id = r.id
+                  AND d.superficie IS NOT NULL
+            )
+            WHERE EXISTS (
+                SELECT 1
+                FROM departements d
+                WHERE d.region_id = r.id
+                  AND d.superficie IS NOT NULL
+            )
+        `;
+
+        await client.query(updateSuperficieQuery);
+
+        await client.query('COMMIT');
+        console.log('Statistiques des régions mises à jour.');
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Erreur pendant la mise à jour des statistiques des régions:', error);
+    } finally {
+        client.release();
+    }
+}
+
 async function main() {
     try {
         console.log('Démarrage de la collecte des données géographiques via l\'API Geo...');
+
+        await checkAndCreateColumnsIfNeeded();
 
         const regions = await fetchRegions();
         const departements = await fetchDepartements();
@@ -251,6 +458,8 @@ async function main() {
 
             if (departementsImported) {
                 await importCommunes(communes);
+                await updateDepartementsStats();
+                await updateRegionsStats();
             }
         }
 

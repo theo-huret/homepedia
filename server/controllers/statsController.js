@@ -108,6 +108,8 @@ const getPricesByCommune = async (req, res, next) => {
                 c.id,
                 c.code_insee,
                 c.nom,
+                c.longitude,
+                c.latitude,
                 d.code as departement_code,
                 d.nom as departement_nom,
                 ROUND(AVG(pmc.prix_moyen_m2), 2) AS prix_moyen_m2,
@@ -139,7 +141,7 @@ const getPricesByCommune = async (req, res, next) => {
             paramCount++;
         }
 
-        query += ` GROUP BY c.id, c.code_insee, c.nom, d.code, d.nom 
+        query += ` GROUP BY c.id, c.code_insee, c.nom, c.latitude, c.longitude, d.code, d.nom
                   ORDER BY prix_moyen_m2 DESC
                   LIMIT $${paramCount}`;
         values.push(limit);
@@ -384,21 +386,22 @@ const getHomepageStats = async (req, res, next) => {
         }
 
         const topVillesQuery = `
-            SELECT 
-                c.nom,
-                d.nom AS departement,
-                ROUND(AVG(pmc.prix_moyen_m2), 2) AS prix_moyen_m2
-            FROM prix_moyens_communes pmc
-            JOIN communes c ON pmc.commune_id = c.id
-            JOIN departements d ON c.departement_id = d.id
-            JOIN types_bien tb ON pmc.type_bien_id = tb.id
-            WHERE pmc.annee = $1
-            AND tb.code = 'APPARTEMENT'
-            AND pmc.nombre_transactions >= 10
-            GROUP BY c.nom, d.nom
-            ORDER BY prix_moyen_m2 DESC
-            LIMIT 5
-        `;
+    SELECT 
+        c.nom,
+        d.nom AS departement,
+        ROUND(AVG(COALESCE(pmc.prix_moyen_m2, 0)), 2) AS prix_moyen_m2
+    FROM prix_moyens_communes pmc
+    JOIN communes c ON pmc.commune_id = c.id
+    JOIN departements d ON c.departement_id = d.id
+    JOIN types_bien tb ON pmc.type_bien_id = tb.id
+    WHERE pmc.annee = $1
+    AND tb.code = 'APPARTEMENT'
+    AND pmc.nombre_transactions >= 10
+    GROUP BY c.nom, d.nom
+    HAVING AVG(COALESCE(pmc.prix_moyen_m2, 0)) > 0
+    ORDER BY prix_moyen_m2 DESC
+    LIMIT 5
+`;
         const topVillesResult = await pgQuery(topVillesQuery, [derniereAnnee]);
 
         const regionsQuery = `

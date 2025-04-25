@@ -140,7 +140,7 @@ const AnalysePage = () => {
                 })).sort((a, b) => b.value - a.value).slice(0, 10); // Top 10
 
             } else if (analysisType === 'evolution') {
-                const periode = timeFrame === '5-years' ? 5 : (timeFrame === '10-years' ? 10 : 1);
+                const periode = timeFrame === '5-years' ? 5 : 1;
 
                 response = await apiService.getPriceEvolution({
                     regionId: selectedRegion || undefined,
@@ -195,8 +195,7 @@ const AnalysePage = () => {
         if (analysisType === 'price') {
             return `Prix moyen au m² des ${typeBienLabel.toLowerCase()}s en ${timeFrame} - ${regionLabel}`;
         } else if (analysisType === 'evolution') {
-            const period = timeFrame === '5-years' ? '5 dernières années' :
-                (timeFrame === '10-years' ? '10 dernières années' : timeFrame);
+            const period = timeFrame === '5-years' ? '5 dernières années' : timeFrame;
             return `Évolution des prix des ${typeBienLabel.toLowerCase()}s sur les ${period} - ${regionLabel}`;
         } else {
             return `Volume de transactions par type de bien en ${timeFrame} - ${regionLabel}`;
@@ -255,10 +254,12 @@ const AnalysePage = () => {
                                 onChange={handleTimeFrameChange}
                                 label="Période"
                             >
+                                <MenuItem value="2024">2024</MenuItem>
                                 <MenuItem value="2023">2023</MenuItem>
                                 <MenuItem value="2022">2022</MenuItem>
+                                <MenuItem value="2021">2021</MenuItem>
+                                <MenuItem value="2020">2020</MenuItem>
                                 <MenuItem value="5-years">5 dernières années</MenuItem>
-                                <MenuItem value="10-years">10 dernières années</MenuItem>
                             </Select>
                         </StyledFormControl>
                     </Grid>

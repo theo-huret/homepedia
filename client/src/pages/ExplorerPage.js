@@ -294,7 +294,6 @@ const ExplorerPage = () => {
                                 label="Indicateur"
                             >
                                 <MenuItem value="prix">Prix moyen au m²</MenuItem>
-                                <MenuItem value="evolution">Évolution des prix</MenuItem>
                                 <MenuItem value="transactions">Nombre de transactions</MenuItem>
                             </Select>
                         </StyledFormControl>

@@ -105,11 +105,12 @@ const getDepartementStats = async (req, res, next) => {
             SELECT 
                 tb.id AS type_bien_id,
                 tb.libelle AS type_bien,
-                pm.prix_moyen_m2,
-                pm.nombre_transactions
+                ROUND (AVG(pm.prix_moyen_m2)::numeric, 2) as prix_moyen_m2,
+                SUM(pm.nombre_transactions) AS nombre_transactions
             FROM prix_moyens_departements pm
             JOIN types_bien tb ON pm.type_bien_id = tb.id
             WHERE pm.departement_id = $1 AND pm.annee = $2
+            GROUP BY tb.id, tb.libelle
         `;
 
         const values = [departementId, annee];
@@ -119,7 +120,7 @@ const getDepartementStats = async (req, res, next) => {
             values.push(trimestre);
         }
 
-        query += ` ORDER BY pm.nombre_transactions DESC`;
+        query += ` ORDER BY nombre_transactions DESC`;
 
         const result = await pgQuery(query, values);
 

@@ -13,15 +13,16 @@ import {
 } from 'recharts';
 
 const SimpleBarChart = ({ data, dataKey = 'value', label = 'Prix moyen au m²' }) => {
-    // Utiliser LineChart si les données contiennent une évolution (graphique temporel)
     const hasEvolution = data.some(item => item.evolution !== undefined);
     const isTimeSeries = data.some(item => !isNaN(parseInt(item.name)));
 
-    const renderTooltip = (value) => {
-        if (label.includes('Prix')) {
+    const renderTooltip = (value, name) => {
+        if (name === label) {
             return [`${value.toLocaleString()} €/m²`, label];
+        } else if (name === "Évolution en %") {
+            return [`${value.toLocaleString()} %`, "Évolution en %"];
         } else {
-            return [value.toLocaleString(), label];
+            return [value];
         }
     };
 
@@ -54,7 +55,7 @@ const SimpleBarChart = ({ data, dataKey = 'value', label = 'Prix moyen au m²' }
                         }}
                     />
                     <Tooltip
-                        formatter={(value) => renderTooltip(value)}
+                        formatter={renderTooltip}
                     />
                     <Legend verticalAlign="top" height={36} />
                     <Line
@@ -108,7 +109,7 @@ const SimpleBarChart = ({ data, dataKey = 'value', label = 'Prix moyen au m²' }
                     }}
                 />
                 <Tooltip
-                    formatter={(value) => renderTooltip(value)}
+                    formatter={renderTooltip}
                 />
                 <Legend verticalAlign="top" height={36} />
                 <Bar

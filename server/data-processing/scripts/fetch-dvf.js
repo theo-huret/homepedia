@@ -14,7 +14,7 @@ const pool = new Pool({
     connectionString: process.env.POSTGRES_URI || 'postgres://postgres:postgres@localhost:5432/homepedia'
 });
 
-const DVF_URL = 'https://files.data.gouv.fr/geo-dvf/latest/csv/2022/full.csv.gz';
+const DVF_URL = 'https://files.data.gouv.fr/geo-dvf/latest/csv/2024/full.csv.gz';
 const DATA_DIR = path.join(__dirname, '../data');
 const FILE_PATH = path.join(DATA_DIR, 'dvf_2022.csv.gz');
 const EXTRACTED_PATH = path.join(DATA_DIR, 'dvf_2022.csv');

@@ -167,7 +167,7 @@ const HomePage = () => {
                                 <StatCard elevation={2}>
                                     <TrendingUpIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
                                     <StatValue>{stats.evolution_prix > 0 ? '+' : ''}{stats.evolution_prix}%</StatValue>
-                                    <Typography variant="body1">Évolution des prix</Typography>
+                                    <Typography variant="body1">Évolution des prix de 2023 à 2024</Typography>
                                 </StatCard>
                             </Grid>
                             <Grid item xs={12} sm={6} md={3}>

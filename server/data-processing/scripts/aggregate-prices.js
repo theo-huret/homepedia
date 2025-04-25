@@ -15,7 +15,9 @@ async function aggregatePricesCommunes() {
     try {
         await client.query('BEGIN');
 
+        // Réinitialisation de la table des prix moyens par commune
         await client.query('TRUNCATE TABLE prix_moyens_communes');
+
         await client.query(`
       INSERT INTO prix_moyens_communes (
         commune_id, type_bien_id, annee, trimestre, prix_moyen_m2, nombre_transactions
@@ -26,18 +28,21 @@ async function aggregatePricesCommunes() {
         EXTRACT(YEAR FROM date_mutation) AS annee,
         EXTRACT(QUARTER FROM date_mutation) AS trimestre,
         CASE 
-          WHEN SUM(surface_reelle_bati) > 0 
+          WHEN SUM(surface_reelle_bati) > 0 AND SUM(surface_reelle_bati) < 1000 -- surface raisonnable
           THEN SUM(valeur_fonciere) / SUM(surface_reelle_bati)
           ELSE NULL
         END AS prix_moyen_m2,
         COUNT(*) AS nombre_transactions
       FROM transactions
-      WHERE 
-        commune_id IS NOT NULL AND
-        type_bien_id IS NOT NULL AND
-        surface_reelle_bati > 0 AND
-        valeur_fonciere > 0
+      WHERE
+          commune_id IS NOT NULL AND
+          type_bien_id IS NOT NULL AND
+          surface_reelle_bati IS NOT NULL AND
+          surface_reelle_bati > 0 AND
+          valeur_fonciere > 0
+          AND valeur_fonciere / surface_reelle_bati < 15000 -- maximum raisonnable (15 000 €/m²)
       GROUP BY commune_id, type_bien_id, annee, trimestre
+      HAVING COUNT(*) >= 5 -- Minimum 5 transactions pour éviter les résultats faussés par peu de données
     `);
 
         await client.query('COMMIT');
@@ -89,6 +94,7 @@ async function aggregatePricesDepartements() {
       JOIN communes c ON t.commune_id = c.id
       JOIN departements d ON c.departement_id = d.id
       GROUP BY d.id, t.type_bien_id, t.annee, t.trimestre
+      HAVING SUM(t.nombre_transactions) >= 10 -- Minimum 10 transactions par trimestre
     `);
 
         await client.query('COMMIT');

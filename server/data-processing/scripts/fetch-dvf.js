@@ -179,16 +179,18 @@ async function processCSV() {
             createReadStream(EXTRACTED_PATH)
                 .pipe(csv())
                 .on('data', (data) => {
-                    if (count < 10000) { // Limiter à 10000 transactions
-                        transactions.push(data);
-                        count++;
+                    transactions.push(data);
+                    count++;
+
+                    if (count % 1000 === 0) {
+                        console.log(`Lignes lues : ${count}`);
                     }
                 })
                 .on('end', resolve)
                 .on('error', reject);
         });
 
-        console.log(`${transactions.length} transactions lues du CSV (limité aux 10000 premières)`);
+        console.log(`${transactions.length} transactions lues du CSV`);
 
         const newCommunesMap = await insertMissingCommunes(transactions);
         const newTypesMap = await insertMissingTypesBien(transactions);

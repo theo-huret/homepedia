@@ -167,9 +167,65 @@ const MapComponent = ({ region, indicator, data = [] }) => {
             }
             // Si nous avons seulement un code (pour les régions/départements)
             else {
-                // Ici, vous pourriez ajouter une logique pour obtenir les coordonnées à partir du code
-                // ou utiliser GeoJSON pour afficher les frontières des régions/départements
-                console.log(`Pas de coordonnées disponibles pour ${item.nom}`);
+                // Ici tu peux récupérer les coordonnées des régions/départements à partir d'un fichier GeoJSON
+                fetch('path_to_your_geojson_file.geojson')  // Remplace par le chemin de ton fichier GeoJSON
+                    .then(response => response.json())
+                    .then(geojsonData => {
+                        // Trouver la région ou le département dans les données GeoJSON en fonction du code
+                        const regionOrDepartement = geojsonData.features.find(feature => {
+                            return feature.properties.code === item.code;  // Assurez-vous que 'code' correspond à la clé dans tes données GeoJSON
+                        });
+
+                        if (regionOrDepartement) {
+                            // Ajouter une couche de frontières de la région/département
+                            const boundary = regionOrDepartement.geometry.coordinates;
+
+                            // Si la région/département est un multipolygone, il peut y avoir plusieurs coordonnées
+                            if (boundary.length > 1) {
+                                boundary.forEach(coords => {
+                                    const polygon = new mapboxgl.Polygon(coords);
+                                    map.current.addLayer({
+                                        id: `boundary-${item.code}`,
+                                        type: 'fill',
+                                        source: {
+                                            type: 'geojson',
+                                            data: {
+                                                type: 'Feature',
+                                                geometry: {
+                                                    type: 'Polygon',
+                                                    coordinates: coords
+                                                }
+                                            }
+                                        },
+                                        paint: {
+                                            'fill-color': '#f00',  // Choisir une couleur pour la frontière
+                                            'fill-opacity': 0.3
+                                        }
+                                    });
+                                });
+                            } else {
+                                // Si c'est une seule frontière (pas un multipolygone)
+                                const polygon = new mapboxgl.Polygon(boundary);
+                                map.current.addLayer({
+                                    id: `boundary-${item.code}`,
+                                    type: 'fill',
+                                    source: {
+                                        type: 'geojson',
+                                        data: regionOrDepartement
+                                    },
+                                    paint: {
+                                        'fill-color': '#f00',
+                                        'fill-opacity': 0.3
+                                    }
+                                });
+                            }
+                        } else {
+                            console.log(`Pas de coordonnées disponibles pour ${item.nom}`);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erreur lors du chargement du fichier GeoJSON', error);
+                    });
             }
         });
 

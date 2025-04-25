@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
 const compression = require('compression');
+const passport = require('passport');
 const errorHandler = require('./middlewares/errorHandler');
 const routes = require('./routes');
 
@@ -20,14 +21,20 @@ app.use(cors({
 app.use(helmet());
 app.use(compression());
 
+// Initialiser Passport pour l'authentification
+app.use(passport.initialize());
+require('./config/passport');
+
 const pgPool = new Pool({
     connectionString: process.env.POSTGRES_URI || 'postgres://postgres:postgres@localhost:5432/homepedia'
 });
 
 mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/homepedia', {
     useNewUrlParser: true,
-    useUnifiedTopology: true
+    useUnifiedTopology: true,
+    dbName: 'homepedia'
 })
+    .then(() => console.log('MongoDB Connected'))
     .catch(err => console.log('MongoDB Connection Error:', err));
 
 app.get('/', (req, res) => {

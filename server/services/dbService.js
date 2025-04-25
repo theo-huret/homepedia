@@ -13,7 +13,7 @@ mongoose.connect(mongoURI, {
     useNewUrlParser: true,
     useUnifiedTopology: true
 })
-    .then(() => console.log('MongoDB Connected'))
+    .then()
     .catch(err => console.log('MongoDB Connection Error:', err));
 
 const pgQuery = async (text, params) => {

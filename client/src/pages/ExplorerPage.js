@@ -72,7 +72,7 @@ const ExplorerPage = () => {
     const [region, setRegion] = useState('');
     const [departement, setDepartement] = useState('');
     const [indicator, setIndicator] = useState('prix');
-    const [typeBien, setTypeBien] = useState('1'); // 1 = Appartement par défaut
+    const [typeBien, setTypeBien] = useState('1');
     const [loading, setLoading] = useState(false);
     const [regionsData, setRegionsData] = useState([]);
     const [departementsData, setDepartementsData] = useState([]);
@@ -82,7 +82,6 @@ const ExplorerPage = () => {
     const [typesBien, setTypesBien] = useState([]);
     const { setError } = useAppContext();
 
-    // Charger les régions au démarrage
     useEffect(() => {
         const fetchRegions = async () => {
             try {
@@ -107,7 +106,6 @@ const ExplorerPage = () => {
         fetchTypesBien();
     }, [setError]);
 
-    // Charger les départements lorsqu'une région est sélectionnée
     useEffect(() => {
         const fetchDepartements = async () => {
             if (!region) {
@@ -119,7 +117,6 @@ const ExplorerPage = () => {
                 const response = await apiService.getDepartements({ regionId: region });
                 setDepartementsData(response.data.data);
             } catch (error) {
-                console.error('Erreur lors du chargement des départements:', error);
                 setError('Impossible de charger les départements de cette région.');
             }
         };
@@ -127,7 +124,6 @@ const ExplorerPage = () => {
         fetchDepartements();
     }, [region, setError]);
 
-    // Charger les statistiques de la région sélectionnée
     useEffect(() => {
         const fetchRegionStats = async () => {
             if (!region) {
@@ -146,7 +142,6 @@ const ExplorerPage = () => {
         fetchRegionStats();
     }, [region]);
 
-    // Charger les statistiques du département sélectionné
     useEffect(() => {
         const fetchDepartementStats = async () => {
             if (!departement) {
@@ -165,7 +160,6 @@ const ExplorerPage = () => {
         fetchDepartementStats();
     }, [departement]);
 
-    // Charger les données pour la carte selon l'indicateur choisi
     useEffect(() => {
         const fetchDataForMap = async () => {
             setLoading(true);
@@ -173,7 +167,6 @@ const ExplorerPage = () => {
                 let response;
 
                 if (departement) {
-                    // Données pour une carte au niveau communes du département
                     if (indicator === 'prix') {
                         response = await apiService.getPricesByCommune({
                             departementId: departement,
@@ -182,7 +175,6 @@ const ExplorerPage = () => {
                         });
                     }
                 } else if (region) {
-                    // Données pour une carte au niveau départements de la région
                     if (indicator === 'prix') {
                         response = await apiService.getPricesByDepartement({
                             regionId: region,
@@ -191,7 +183,6 @@ const ExplorerPage = () => {
                         });
                     }
                 } else {
-                    // Données pour une carte nationale au niveau régions
                     if (indicator === 'prix') {
                         response = await apiService.getPricesByRegion({
                             annee: 2022,
@@ -216,7 +207,7 @@ const ExplorerPage = () => {
 
     const handleRegionChange = (event) => {
         setRegion(event.target.value);
-        setDepartement(''); // Réinitialiser le département lorsque la région change
+        setDepartement('');
     };
 
     const handleDepartementChange = (event) => {
@@ -231,7 +222,6 @@ const ExplorerPage = () => {
         setTypeBien(event.target.value);
     };
 
-    // Formater les données pour l'affichage
     const getTypeBienLabel = (id) => {
         const typeBien = typesBien.find(type => type.id === parseInt(id));
         return typeBien ? typeBien.libelle : 'Tous types';

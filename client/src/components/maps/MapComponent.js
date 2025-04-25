@@ -3,34 +3,29 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Box, Typography, Alert } from '@mui/material';
 
-// Token MapBox
 const MAPBOX_TOKEN = 'pk.eyJ1Ijoic3RvbXBhciIsImEiOiJjbTlzbTEyZ3owMXhqMnJyNm1meGc1YXd1In0.IQecquzqoSmFlMraw4J0oA';
 
-// Coordonnées des régions françaises avec IDs correspondant à l'API
 const REGIONS = {
-    // Métropole
-    "4": [2.35, 48.85, 8],  // Île-de-France
-    "5": [1.7, 47.8, 7],    // Centre-Val de Loire
-    "6": [5.0, 47.3, 7],    // Bourgogne-Franche-Comté
-    "7": [0.1, 49.2, 7],    // Normandie
-    "8": [2.8, 50.6, 7],    // Hauts-de-France
-    "9": [5.5, 48.7, 7],    // Grand Est
-    "10": [-0.8, 47.5, 7],  // Pays de la Loire
-    "11": [-2.8, 48.1, 7],  // Bretagne
-    "12": [-0.6, 44.8, 7],  // Nouvelle-Aquitaine
-    "13": [1.4, 43.6, 7],   // Occitanie
-    "14": [4.4, 45.4, 7],   // Auvergne-Rhône-Alpes
-    "15": [6.0, 43.5, 7],   // Provence-Alpes-Côte d'Azur
-    "16": [9.0, 42.2, 8],   // Corse
-    // DOM-TOM
-    "17": [-61.6, 16.25, 9], // Guadeloupe
-    "18": [-61.0, 14.7, 9],  // Martinique
-    "19": [-53.0, 4.0, 7],   // Guyane
-    "20": [55.5, -21.1, 9],  // La Réunion
-    "21": [45.2, -12.8, 10]  // Mayotte
+    "4": [2.35, 48.85, 8],
+    "5": [1.7, 47.8, 7],
+    "6": [5.0, 47.3, 7],
+    "7": [0.1, 49.2, 7],
+    "8": [2.8, 50.6, 7],
+    "9": [5.5, 48.7, 7],
+    "10": [-0.8, 47.5, 7],
+    "11": [-2.8, 48.1, 7],
+    "12": [-0.6, 44.8, 7],
+    "13": [1.4, 43.6, 7],
+    "14": [4.4, 45.4, 7],
+    "15": [6.0, 43.5, 7],
+    "16": [9.0, 42.2, 8],
+    "17": [-61.6, 16.25, 9],
+    "18": [-61.0, 14.7, 9],
+    "19": [-53.0, 4.0, 7],
+    "20": [55.5, -21.1, 9],
+    "21": [45.2, -12.8, 10]
 };
 
-// Noms des régions pour la légende
 const REGION_NAMES = {
     "4": "Île-de-France",
     "5": "Centre-Val de Loire",
@@ -52,9 +47,7 @@ const REGION_NAMES = {
     "21": "Mayotte"
 };
 
-// Coordonnées des départements français
 const DEPARTEMENTS = {
-    // Format: code: [longitude, latitude]
     "01": [5.33, 46.10], "02": [3.62, 49.57], "03": [3.33, 46.57],
     "04": [6.23, 44.08], "05": [6.50, 44.67], "06": [7.25, 43.70],
     "07": [4.60, 44.75], "08": [4.72, 49.50], "09": [1.60, 42.93],
@@ -87,7 +80,6 @@ const DEPARTEMENTS = {
     "87": [1.25, 45.83], "88": [6.38, 48.20], "89": [3.57, 47.80],
     "90": [6.87, 47.63], "91": [2.15, 48.45], "92": [2.25, 48.88],
     "93": [2.48, 48.92], "94": [2.47, 48.78], "95": [2.13, 49.08],
-    // DOM-TOM
     "971": [-61.58, 16.25], "972": [-61.00, 14.67], "973": [-53.00, 4.00],
     "974": [55.53, -21.11], "976": [45.23, -12.78]
 };
@@ -100,15 +92,7 @@ const MapComponent = ({ region, indicator, data = [] }) => {
     const [mapLoaded, setMapLoaded] = useState(false);
     const [error, setError] = useState(null);
 
-    // Initialisation de la carte
     useEffect(() => {
-        console.log("🔄 Initialisation de la carte");
-
-        if (!mapContainer.current) {
-            console.warn("❌ Container de carte non disponible");
-            return;
-        }
-
         try {
             mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -116,29 +100,21 @@ const MapComponent = ({ region, indicator, data = [] }) => {
                 map.current = new mapboxgl.Map({
                     container: mapContainer.current,
                     style: 'mapbox://styles/mapbox/light-v10',
-                    center: [2.21, 46.23], // Centre de la France
+                    center: [2.21, 46.23],
                     zoom: 5
                 });
 
                 map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
                 map.current.on('load', () => {
-                    console.log("✅ Carte chargée avec succès");
                     setMapLoaded(true);
-                });
-
-                map.current.on('error', (e) => {
-                    console.error("❌ Erreur Mapbox:", e);
-                    setError(`Erreur de carte: ${e.error?.message || 'Erreur inconnue'}`);
                 });
             }
         } catch (err) {
-            console.error("❌ Erreur lors de l'initialisation de la carte:", err);
             setError(`Erreur d'initialisation: ${err.message}`);
         }
 
         return () => {
-            console.log("🧹 Nettoyage complet");
             markersRef.current.forEach(marker => marker.remove());
             markersRef.current = [];
 
@@ -150,19 +126,12 @@ const MapComponent = ({ region, indicator, data = [] }) => {
     }, []);
 
     useEffect(() => {
-        if (!map.current || !mapLoaded) {
-            console.log("⏳ Attente du chargement de la carte pour le centrage");
-            return;
-        }
-
         try {
             if (region) {
                 const regionId = region.toString();
-                console.log("🔍 Centrage sur la région ID:", regionId);
 
                 if (REGIONS[regionId]) {
                     const [longitude, latitude, zoom] = REGIONS[regionId];
-                    console.log(`🎯 Centrage carte: [${longitude}, ${latitude}], zoom=${zoom}`);
 
                     map.current.flyTo({
                         center: [longitude, latitude],
@@ -170,7 +139,6 @@ const MapComponent = ({ region, indicator, data = [] }) => {
                         essential: true
                     });
                 } else {
-                    console.warn(`⚠️ Région ID=${regionId} non trouvée - affichage de la France entière`);
                     map.current.flyTo({
                         center: [2.21, 46.23],
                         zoom: 5,
@@ -178,7 +146,6 @@ const MapComponent = ({ region, indicator, data = [] }) => {
                     });
                 }
             } else {
-                console.log("🌍 Affichage de la France entière");
                 map.current.flyTo({
                     center: [2.21, 46.23],
                     zoom: 5,
@@ -186,36 +153,21 @@ const MapComponent = ({ region, indicator, data = [] }) => {
                 });
             }
         } catch (err) {
-            console.error("❌ Erreur lors du centrage de la carte:", err);
             setError(`Erreur de centrage: ${err.message}`);
         }
     }, [region, mapLoaded]);
 
     useEffect(() => {
-        if (!map.current || !mapLoaded) {
-            console.log("⏳ Attente de la carte pour l'affichage des données");
-            return;
-        }
-
         displayDefaultRegions();
-
-        console.log(`📊 Affichage de ${data.length} éléments sur la carte (indicateur: ${indicator})`);
-        if (data.length > 0) {
-            console.log("📋 Premier élément des données:", data[0]);
-        }
-
         try {
             markersRef.current.forEach(marker => marker.remove());
             markersRef.current = [];
 
-            // Si pas de données, afficher un message
             if (!data || data.length === 0) {
-                console.warn("⚠️ Pas de données à afficher");
                 setError("Aucune donnée disponible pour cet indicateur.");
                 return;
             }
 
-            // Trouver les valeurs min et max pour ajuster l'échelle des couleurs
             let minValue = Infinity;
             let maxValue = -Infinity;
 
@@ -235,52 +187,38 @@ const MapComponent = ({ region, indicator, data = [] }) => {
                 }
             });
 
-            console.log(`Valeurs pour ${indicator}: min=${minValue.toFixed(2)}, max=${maxValue.toFixed(2)}`);
-
-            // Si pas de valeurs valides, afficher un message
-            if (minValue === Infinity || maxValue === -Infinity) {
-                console.warn("⚠️ Pas de valeurs valides trouvées dans les données");
-                setError("Aucune donnée valide trouvée pour cet indicateur.");
-                return;
-            }
-
-            // Fonction pour obtenir une couleur selon la valeur
             const getColor = (value) => {
                 if (indicator === 'prix') {
-                    // Échelle adaptative pour les prix immobiliers
                     const threshold1 = minValue + (maxValue - minValue) * 0.2;
                     const threshold2 = minValue + (maxValue - minValue) * 0.4;
                     const threshold3 = minValue + (maxValue - minValue) * 0.6;
                     const threshold4 = minValue + (maxValue - minValue) * 0.8;
 
-                    if (value > threshold4) return '#0d47a1'; // Bleu très foncé
-                    if (value > threshold3) return '#1976d2'; // Bleu foncé
-                    if (value > threshold2) return '#42a5f5'; // Bleu moyen
-                    if (value > threshold1) return '#90caf9'; // Bleu clair
-                    return '#bbdefb';                         // Bleu très clair
+                    if (value > threshold4) return '#0d47a1';
+                    if (value > threshold3) return '#1976d2';
+                    if (value > threshold2) return '#42a5f5';
+                    if (value > threshold1) return '#90caf9';
+                    return '#bbdefb';
                 } else if (indicator === 'evolution') {
-                    // Pour l'évolution, seuils FIXES comme dans l'ancienne version
-                    if (value > 10) return '#1b5e20';    // Vert foncé (forte hausse)
-                    if (value > 5) return '#4caf50';     // Vert moyen
-                    if (value > 0) return '#a5d6a7';     // Vert clair
-                    if (value > -5) return '#ffcdd2';    // Rouge clair
-                    return '#e57373';                    // Rouge moyen (forte baisse)
+                    if (value > 10) return '#1b5e20';
+                    if (value > 5) return '#4caf50';
+                    if (value > 0) return '#a5d6a7';
+                    if (value > -5) return '#ffcdd2';
+                    return '#e57373';
                 } else {
-                    // Pour les transactions, échelle violette adaptative
                     const threshold1 = minValue + (maxValue - minValue) * 0.2;
                     const threshold2 = minValue + (maxValue - minValue) * 0.4;
                     const threshold3 = minValue + (maxValue - minValue) * 0.6;
                     const threshold4 = minValue + (maxValue - minValue) * 0.8;
 
-                    if (value > threshold4) return '#4a148c'; // Violet foncé
-                    if (value > threshold3) return '#7b1fa2'; // Violet moyen
-                    if (value > threshold2) return '#9c27b0'; // Violet
-                    if (value > threshold1) return '#ba68c8'; // Violet clair
-                    return '#e1bee7';                         // Violet très clair
+                    if (value > threshold4) return '#4a148c';
+                    if (value > threshold3) return '#7b1fa2';
+                    if (value > threshold2) return '#9c27b0';
+                    if (value > threshold1) return '#ba68c8';
+                    return '#e1bee7';
                 }
             };
 
-            // Mise à jour de la légende avec des seuils adaptés
             if (indicator === 'prix') {
                 const threshold1 = Math.round(minValue + (maxValue - minValue) * 0.2);
                 const threshold2 = Math.round(minValue + (maxValue - minValue) * 0.4);
@@ -295,7 +233,6 @@ const MapComponent = ({ region, indicator, data = [] }) => {
                     { color: '#bbdefb', label: `< ${threshold1} €/m²` }
                 ]);
             } else if (indicator === 'evolution') {
-                // Légende FIXE pour l'évolution comme dans l'ancienne version
                 setLegendData([
                     { color: '#1b5e20', label: '> +10%' },
                     { color: '#4caf50', label: '+5% à +10%' },
@@ -318,10 +255,8 @@ const MapComponent = ({ region, indicator, data = [] }) => {
                 ]);
             }
 
-            // Ajouter les marqueurs pour chaque élément
             let markersAdded = 0;
             data.forEach(item => {
-                // Extraire la valeur selon l'indicateur
                 let value;
                 if (indicator === 'prix') {
                     value = parseFloat(item.prix_moyen_m2);
@@ -331,12 +266,6 @@ const MapComponent = ({ region, indicator, data = [] }) => {
                     value = parseInt(item.nombre_transactions);
                 }
 
-                if (isNaN(value)) {
-                    console.warn(`⚠️ Valeur invalide pour ${item.nom || 'item inconnu'}: ${value}`);
-                    return;
-                }
-
-                // Contenu du popup
                 const popupContent = `
                     <div style="padding: 10px;">
                         <h4 style="margin: 0 0 8px 0;">${item.nom || 'N/A'}</h4>
@@ -350,17 +279,13 @@ const MapComponent = ({ region, indicator, data = [] }) => {
                     </div>
                 `;
 
-                // Trouver les coordonnées
                 let lng = 0, lat = 0;
                 let coordFound = false;
-                console.log(item);
                 if (item.longitude && item.latitude) {
-                    console.log("ok");
                     lng = parseFloat(item.longitude);
                     lat = parseFloat(item.latitude);
                     if (lng !== 0 && lat !== 0) {
                         coordFound = true;
-                        console.log(`Coordonnées directes trouvées pour ${item.nom}: [${lng}, ${lat}]`);
                     }
                 }
 
@@ -370,7 +295,6 @@ const MapComponent = ({ region, indicator, data = [] }) => {
                         lng = REGIONS[regionId][0];
                         lat = REGIONS[regionId][1];
                         coordFound = true;
-                        console.log(`✅ Coordonnées trouvées pour région ID=${regionId} (${item.nom})`);
                     }
                 }
 
@@ -380,25 +304,20 @@ const MapComponent = ({ region, indicator, data = [] }) => {
                         lng = DEPARTEMENTS[deptCode][0];
                         lat = DEPARTEMENTS[deptCode][1];
                         coordFound = true;
-                        console.log(`✅ Coordonnées trouvées pour département ${deptCode} (${item.nom})`);
                     }
                 }
 
-                // 5. Recherche par nom dans les dictionnaires
                 if (!coordFound && item.nom) {
-                    // Nom de région
                     for (const [id, name] of Object.entries(REGION_NAMES)) {
                         if (name === item.nom) {
                             lng = REGIONS[id][0];
                             lat = REGIONS[id][1];
                             coordFound = true;
-                            console.log(`✅ Coordonnées trouvées pour région par nom: ${item.nom}`);
                             break;
                         }
                     }
                 }
 
-                // Si on a trouvé des coordonnées, ajouter le marqueur
                 if (coordFound) {
                     try {
                         const marker = new mapboxgl.Marker({
@@ -411,37 +330,26 @@ const MapComponent = ({ region, indicator, data = [] }) => {
                         markersRef.current.push(marker);
                         markersAdded++;
                     } catch (err) {
-                        console.error("❌ Erreur lors de l'ajout du marqueur:", err);
+
                     }
-                } else {
-                    console.warn(`⚠️ Coordonnées non trouvées pour: ${item.nom || 'élément sans nom'}`);
                 }
             });
 
-            console.log(`✅ ${markersAdded} marqueurs ajoutés sur la carte`);
-
-            // Si aucun marqueur n'a été ajouté, afficher un message
             if (markersAdded === 0) {
-                setError("Aucun marqueur n'a pu être ajouté. Les données ne contiennent pas de coordonnées valides.");
-                // Afficher les régions par défaut
                 displayDefaultRegions();
             } else {
-                setError(null); // Effacer les erreurs précédentes si tout va bien
+                setError(null);
             }
-
         } catch (err) {
-            console.error("❌ Erreur lors de l'affichage des données:", err);
             setError(`Erreur d'affichage: ${err.message}`);
         }
     }, [data, indicator, mapLoaded]);
 
     const displayDefaultRegions = () => {
         try {
-            // Nettoyer les marqueurs existants
             markersRef.current.forEach(marker => marker.remove());
             markersRef.current = [];
 
-            // Afficher les régions principales de France métropolitaine
             const defaultRegions = [
                 { id: "4", name: "Île-de-France", color: '#1976d2' },
                 { id: "14", name: "Auvergne-Rhône-Alpes", color: '#4caf50' },
@@ -463,13 +371,10 @@ const MapComponent = ({ region, indicator, data = [] }) => {
                 markersRef.current.push(marker);
             });
 
-            // Mettre à jour la légende
             setLegendData(defaultRegions.map(region => ({
                 color: region.color,
                 label: region.name
             })));
-
-            console.log("✅ Régions par défaut affichées");
         } catch (err) {
             console.error("❌ Erreur lors de l'affichage des régions par défaut:", err);
         }
